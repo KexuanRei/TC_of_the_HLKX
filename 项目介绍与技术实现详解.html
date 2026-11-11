@@ -1,0 +1,182 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>分段生产横道图 · 项目介绍与技术实现详解</title><style>
+:root{color-scheme:light}*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:24px}
+body{margin:0;background:#f1f5fa;color:#233047;font:15px/1.85 "Microsoft YaHei","Segoe UI",sans-serif}
+nav{position:fixed;inset:0 auto 0 0;width:270px;padding:32px 22px;background:#152b46;color:white;overflow:auto}
+nav strong{font-size:19px;display:block;margin-bottom:20px}nav a{display:block;padding:7px 9px;color:#d8e6f7;text-decoration:none;font-size:13px;border-radius:6px}nav a:hover{background:#29425f}
+main{margin:28px 32px 40px 300px;max-width:1120px;padding:40px 48px;background:white;border:1px solid #dce5ef;border-radius:12px}
+h1{font-size:28px;line-height:1.5;color:#122c49;margin-top:0}h2{font-size:23px;color:#173e68;border-top:1px solid #dbe4ee;padding-top:27px;margin-top:42px}h3{font-size:18px;margin-top:28px;color:#284a70}
+p{margin:13px 0}li{padding:5px 0}strong{color:#132d4b}nav strong{color:white}code{font:13px/1.65 Consolas,monospace;overflow-wrap:anywhere;background:#edf3fa;padding:2px 5px;border-radius:3px}
+pre{background:#132a43;color:#e8f1fc;padding:20px;overflow:auto;border-radius:8px;line-height:1.65}pre code{background:none;padding:0;color:inherit;white-space:pre;overflow-wrap:normal}
+.table{overflow:auto;margin:20px 0}table{border-collapse:collapse;width:100%;font-size:13px}th,td{border:1px solid #dce5ef;padding:10px 12px;text-align:left;vertical-align:top}th{background:#eaf1fa;color:#24466a}tr:nth-child(even) td{background:#f8fafc}
+@media(max-width:1000px){nav{position:static;width:auto;padding:20px}nav a{display:inline-block}main{margin:16px;padding:24px}}@media print{nav{display:none}main{margin:0;max-width:none;border:0;padding:0}body{background:white;font-size:10pt}h2,h3{break-after:avoid}tr{break-inside:avoid}pre{white-space:pre-wrap}pre code{white-space:pre-wrap}.table{overflow:visible}}
+</style></head><body><nav><strong>分段生产横道图<br>项目与技术文档</strong><a href="#section-6">1. 项目定位与使用场景</a><a href="#section-16">2. 功能说明</a><a href="#section-91">3. 总体架构与数据流</a><a href="#section-111">4. 数据模型与字段映射</a><a href="#section-163">5. 业务计算原理</a><a href="#section-191">6. 前端实现详解</a><a href="#section-254">7. Python 模块实现详解</a><a href="#section-289">8. 在线表脚本和接口</a><a href="#section-333">9. 使用到的技术</a><a href="#section-355">10. 文件、配置与运行方式</a><a href="#section-404">11. 术语表</a><a href="#section-443">12. 本次修改、验证和维护说明</a><a href="#section-457">13. 已知限制及可扩展方向</a></nav><main><h1 id="section-0">分段生产横道图工具：项目介绍与技术实现详解</h1>
+<p>编写日期：2026-11-06  <br>对应项目：<code>D:\CH\GT</code>  <br>依据：当前 Python、HTML、JavaScript 源码、日期参考线拖动及 Ctrl＋滚轮连续缩放改动。本文描述实际实现；历史 README 中的固定统计和部分描述不能替代当前代码。本文不包含真实令牌或在线表地址。</p>
+<h2 id="section-6">1. 项目定位与使用场景</h2>
+<p>本项目把船舶分段生产台账转换为交互式横道图（甘特图）。横轴表示日期，纵轴表示船舶或分段，横条表示某个生产阶段的开始与结束。使用者可以先查看船队生产跨度，再点击一艘船观察分段的阶段分布、工期和未填写的节点。</p>
+<p>它由可独立打开的图表页面、本地 HTTP 服务、Windows 窗口控制台、Excel 处理程序和在线表同步脚本组成。没有数据库服务，也没有 React、Vue 等前端框架。图表数据保存为 <code>data.js</code> 快照，浏览器直接加载。</p>
+<p>典型用途包括：核对分段上胎与下胎时间；比较船舶生产周期；查找尚未补全工期的分段；按船号或分段号筛选；把当前视图导出成 Excel；通过 WPS AirScript 定时更新本地数据。</p>
+<p>本工具主要用于查看、汇总和交换生产数据，不是带资源约束的自动排产系统。当前没有任务依赖线、关键路径计算、多人协同编辑或向源 Excel 回写排期的机制。</p>
+<h2 id="section-16">2. 功能说明</h2>
+<h3 id="section-18">2.1 船队总览和单船钻取</h3>
+<p>默认每行是一艘船，汇总条使用当前阶段各分段的最早开始和最晚结束。总览的时间轴会延伸到最晚日期之后第三个月的月末，再增加边缘留白，便于观察后续空档。</p>
+<p>点击船舶行进入单船分段视图；原来处于月视图时，进入后默认切换到日视图。每个分段对应一行，按当前阶段的起始时间排序，同一天再按分段号排序。左侧展示分段/船、类型、吨位、车间、开始日期和工期。点击“← 全部船”返回。</p>
+<h3 id="section-24">2.2 阶段查看</h3>
+<div class="table"><table><thead><tr><th>阶段键</th><th>页面名称</th><th>起点</th><th>终点</th><th>说明</th></tr></thead><tbody><tr><td><code>pb</code></td><td>拼板</td><td>拼板开工</td><td>拼板完工</td><td>橙色阶段</td></tr><tr><td><code>tt</code></td><td>在胎</td><td>分段上胎</td><td>分段下胎</td><td>蓝色阶段</td></tr><tr><td><code>jg</code></td><td>结构</td><td>下胎，缺失时取上胎</td><td>结构完工</td><td>绿色阶段</td></tr><tr><td><code>sn</code></td><td>舾装</td><td>舾装开工</td><td>舾装销项完工</td><td>紫色阶段</td></tr><tr><td><code>zx</code></td><td>转序</td><td>结构成品化</td><td>转序日期</td><td>粉红色阶段</td></tr><tr><td><code>all</code></td><td>全流程</td><td>各阶段最早有效起点</td><td>各阶段最晚有效终点</td><td>汇总跨度，不是五条工序泳道</td></tr></tbody></table></div>
+<p>阶段切换由 <code>PHASES</code> 和 <code>barOf()</code> 控制。当前 <code>setPhase()</code> 主要更新阶段汇总缓存及可见行，不会主动重建排序和时间轴；搜索、钻取等后续重建操作会重新计算。这是现有实现的边界，不应把阶段切换理解为每次都完整重新排版。</p>
+<h3 id="section-37">2.3 时间轴、搜索和提示</h3>
+<p>月视图尽可能把完整周期铺入可视区域；周视图约为适配密度的三倍，并设置上下限；日视图在总览中放大，在单船中根据该船周期自适应。日视图或手动连续缩放达到足够密度时，网页显示日期数字行。</p>
+<p>在横道图区域内按住 Ctrl 并滚动鼠标滚轮，可以连续调整时间轴：向上滚放大，向下滚缩小。缩放以红线选中的日期为锚点，尽量保持红线原有屏幕横坐标，让所选日期附近的时间间隔逐渐展开或收拢。该操作只调整时间轴，不放大整个页面的文字、左侧固定列或按钮；普通滚轮继续用于滚动页面。</p>
+<p>当每天宽度达到 9 像素时，自动出现日号与逐日网格；达到 44 像素时，日号后增加星期。单船视图中的分段条随之展开，悬停仍可查看所有阶段的完整日期。总览不会因为放大而自动变成单船视图，需要分段明细时点击船舶行进入。</p>
+<p>状态栏显示相对月视图的缩放百分比。手动缩放的下限是适配完整时间范围的月视图，上限为每天 64 像素。月/周/日按钮可随时退出手动缩放，恢复对应预设。手动密度在当前页面的窗口尺寸变化、阶段切换和视图重排后保留，若新范围要求更大的最小密度则调整到新下限；页面刷新后不保留。</p>
+<p>如果红线日期仍在时间轴范围内、只是被横向滚出屏幕，下一次缩放会将该日期带回可视区域中间。如果红线日期已经不在当前视图日期范围内，则以当前可视时间区域中点缩放。接近时间轴首尾、或缩小到完整总览时，滚动位置会受到内容边界限制，红线无法始终保持原横坐标。</p>
+<p>输入船号或分段号后，页面经过 220 毫秒防抖再筛选。匹配采用不区分大小写的包含搜索。搜索路径遍历全部分段，即使从单船界面开始输入，也不是仅限当前船。悬停分段时显示该分段各阶段的日期与工期信息。</p>
+<p>时间轴背景用重复 CSS 渐变表示工作日和周末。图表支持横向、纵向滚动，左侧信息列和上方表头保持固定。</p>
+<h3 id="section-53">2.4 可拖动红色日期参考线（本次新增）</h3>
+<p>用鼠标按住红色虚线或顶部标签并左右拖动即可调整参考日期。线条拥有 18 像素宽的透明命中区域，实际可见虚线仍保持细线样式，减少“必须点得很准”的问题。</p>
+<p>拖动按整天吸附。离开默认日期后，标签显示完整的 <code>YYYY-MM-DD</code>；上方状态栏同时显示参考日期。垂直滚动时标签跟随可视区域顶部，水平滚动时不会覆盖左侧冻结列。拖到时间区域左右边缘时会自动横向滚动。</p>
+<p>点击“定位今天”或双击红线恢复默认日期。红线获得键盘焦点后，方向键移动一天，Shift 加方向键移动七天，Home/End 移到当前时间轴首尾。界面采用 Pointer Events，鼠标、触控笔和触摸指针共用同一套处理逻辑。</p>
+<p>参考日期保留在当前页面内存中，缩放、窗口大小变化和视图操作不会主动重置它；刷新页面或控制台重新加载图表后恢复默认。若所选日期不在新视图时间范围内，或筛选结果没有行，红线隐藏；状态栏仍保留选中的参考日期。</p>
+<p><strong>数据口径：</strong>页面原有 <code>today</code> 来自 <code>data.js</code> 的生成日期，不是浏览器每次打开时的系统日期。本次新增独立的 <code>markerDay</code>，拖动不改变 <code>today</code>，不重算生产工期，不修改源 Excel、不写回 <code>data.js</code>。导出的 Excel 仍使用原有快照“今天”列，临时拖动位置不写入导出文件。例如旧数据生成于 10 月 22 日，11 月打开旧快照时“定位今天”仍回到 10 月 22 日；重新生成数据才更新该基准。</p>
+<h3 id="section-65">2.5 取数与生成图表</h3>
+<p>支持以下路径：</p>
+<ol><li>本地 Excel：用 <code>build.py</code> 或控制台选择 <code>.xlsx/.xlsm</code> 文件和工作表，读取固定列结构，生成 <code>data.js</code>。</li><li>WPS 直连：配置 AirScript webhook 与令牌，通过 <code>gantt_sync.py</code> 分页读取在线表，转换为规范字段，再生成数据。</li><li>在线表链接：直接文件链接下载到 <code>DATE</code> 后读取；普通 kdocs/WPS 分享链接则使用已配置的 AirScript webhook 读取整表、保存为 Excel，再从该 Excel 生成图表。分享链接本身不提供自动登录能力，也不保证与当前 webhook 指向同一文件，需要使用者核对配置。</li><li>通用 URL 拉取：<code>pull.py</code> 接收 JSON 或 CSV，支持单次执行及间隔循环。</li><li>Webhook 推送：外部程序把 JSON 或 CSV POST 到本地服务，由服务归档并生成新快照。</li></ol>
+<p>控制台还提供列出工作表、预览前几行和实际调用接口检查令牌的功能。查看器自身不轮询 <code>data.js</code>；控制台内的取数任务成功后会重载 iframe，独立页面或由外部计划任务更新后的页面需要刷新才读取新快照。</p>
+<h3 id="section-77">2.6 Excel 导出</h3>
+<p>“导出 Excel”把当前阶段、筛选行及当前时间轴完整范围传给本地服务。导出的是当前视图的全部行，不只是屏幕上虚拟化渲染的少量 DOM 行，也不是网页截图。</p>
+<p>导出内容包括标题、月份、左侧六列、按天铺设的彩色条、快照今天列、图例以及冻结窗格。网页缩放参数参与表头选择，但 Excel 每天列宽固定为 3.0，不是逐像素复刻网页。后端同时把文件保存到 <code>DATE</code>，并返回二进制下载。</p>
+<p>直接以 <code>file://</code> 打开查看器可以看图、筛选和拖动红线，但不能调用本地 <code>/api/export</code>；导出需要窗口/HTTP 服务运行。</p>
+<h3 id="section-85">2.7 定时任务、日志与设置</h3>
+<p>Windows 计划任务名为 <code>Gantt_Sync</code>。界面支持安装或重建、暂停、恢复、立即运行和删除，展示上次/下次执行时间与结果。周期默认 120 分钟，安装逻辑限制最短 5 分钟。源码模式执行 Python 同步脚本，EXE 模式执行当前程序的 <code>--gantt-sync</code> 参数。</p>
+<p>日志页面分别读取同步日志 <code>gantt.log</code>、服务日志 <code>service.log</code> 和窗口日志 <code>logs/window.log</code>。设置页面维护 webhook、工作表和 AirScript 令牌；令牌可写入同步配置，同时可选写入用户环境变量。</p>
+<h2 id="section-91">3. 总体架构与数据流</h2>
+<pre><code>本地 Excel ───────────────→ build.py ──────────────┐
+                                                   │
+在线表 → AirScript → gantt_sync.py → core.py ──────┤
+                                                   ├→ data.js → viewer.html
+通用 URL → pull.py ────────────────→ core.py ──────┤               ↑
+                                                   │               │ iframe
+JSON/CSV 推送 → server.py ─────────→ core.py ──────┘             app.html
+                                                                   ↕ HTTP API
+在线链接 → panel.py → DATE/*.xlsx → build.py                  panel.py
+                                                                   ↑
+                                                window.py → 本地服务 + Windows 窗口</code></pre>
+<p>这不是“所有输入都调用同一个转换函数”的架构。<code>build.py</code> 自己实现 Excel 到 payload 的逻辑；<code>core.py</code> 实现字典记录到 payload 的逻辑，两者产出相同结构，但日期解析、完成状态判定和过滤条件存在差异。修改业务规则时需要同时核对两条路径。</p>
+<p>图表采用快照式模型：后端批量生成数据，前端一次性加载到内存，再在内存中分组、筛选、计算跨度并绘制。没有数据库查询、WebSocket 推送或服务端分页显示。</p>
+<h2 id="section-111">4. 数据模型与字段映射</h2>
+<h3 id="section-113">4.1 日期与字典压缩</h3>
+<p>日期统一转为相对 <code>2020-01-01</code> 的整数天数。Python 执行日期相减，JavaScript 通过 UTC 转换和固定偏移 <code>18262</code> 天衔接 Unix 时间，避免浏览器本地时区影响显示日期。</p>
+<p>缺失日期使用 <code>0</code>；因此本实现不能无歧义表示恰好为纪元日的真实生产日期。项目面向后续年度生产台账，维护者仍应知道这一哨兵值约定。</p>
+<p>重复字符串用字典表压缩：<code>types</code>、<code>areas</code>、<code>shops</code> 保存实际文本，分段只存索引；<code>-1</code> 表示没有对应字典项。<code>hulls</code> 保存船舶汇总信息。这样可以减少数千行数据的重复文本和文件体积。</p>
+<h3 id="section-121">4.2 <code>window.GANTT</code> 顶层结构</h3>
+<div class="table"><table><thead><tr><th>字段</th><th>类型</th><th>用途</th></tr></thead><tbody><tr><td><code>gen</code></td><td>字符串</td><td>数据生成时间，分钟精度</td></tr><tr><td><code>today</code></td><td>整数</td><td>生成当天的纪元天数</td></tr><tr><td><code>epoch</code></td><td>字符串</td><td>当前为 <code>2020-01-01</code></td></tr><tr><td><code>source</code></td><td>可选字符串</td><td><code>core.py</code> 路径记录来源；<code>build.py</code> 当前不写该字段</td></tr><tr><td><code>hulls</code></td><td>数组</td><td>每项为 <code>[船号, 船型, 最早起点, 最晚终点, 分段数]</code></td></tr><tr><td><code>types/areas/shops</code></td><td>字符串数组</td><td>类型、施工区域、车间字典</td></tr><tr><td><code>blocks</code></td><td>数组</td><td>每项为下表所示的 16 元素数组</td></tr></tbody></table></div>
+<div class="table"><table><thead><tr><th>下标</th><th>含义</th><th>下标</th><th>含义</th></tr></thead><tbody><tr><td>0</td><td>船舶索引</td><td>8</td><td>上胎日期</td></tr><tr><td>1</td><td>分段号</td><td>9</td><td>下胎日期</td></tr><tr><td>2</td><td>类型索引</td><td>10</td><td>结构开始（下胎或上胎）</td></tr><tr><td>3</td><td>吨位</td><td>11</td><td>结构完工</td></tr><tr><td>4</td><td>区域索引</td><td>12</td><td>舾装开工</td></tr><tr><td>5</td><td>车间索引</td><td>13</td><td>舾装完工</td></tr><tr><td>6</td><td>拼板开工</td><td>14</td><td>结构成品化</td></tr><tr><td>7</td><td>拼板完工</td><td>15</td><td>转序日期</td></tr></tbody></table></div>
+<p>该数组是前后端的数据契约。新增或调整下标时，应同时修改生成器、<code>PHASES</code>、提示内容和导出逻辑。</p>
+<h3 id="section-146">4.3 Excel 列号</h3>
+<p><code>build.COL</code> 使用从 0 开始的索引，以下表格换算为 Excel 从 1 开始的列号。默认跳过前四行，从第五行开始读取。</p>
+<div class="table"><table><thead><tr><th>内容</th><th>Excel 列号</th><th>内容</th><th>Excel 列号</th></tr></thead><tbody><tr><td>船型</td><td>2</td><td>船号</td><td>5</td></tr><tr><td>总段</td><td>6</td><td>新段号</td><td>9</td></tr><tr><td>分段类型</td><td>13</td><td>修正吨</td><td>15</td></tr><tr><td>拼板开工/完工</td><td>16 / 17</td><td>分段上胎/下胎</td><td>19 / 20</td></tr><tr><td>结构完工</td><td>22</td><td>舾装开工/销项完工</td><td>38 / 42</td></tr><tr><td>结构成品化</td><td>48</td><td>转序日期/生产部转序</td><td>51 / 52</td></tr><tr><td>施工区域</td><td>53</td><td>分段车间/施工部门</td><td>56 / 57</td></tr><tr><td>船体状态</td><td>75</td><td>表头行数</td><td>4 行</td></tr></tbody></table></div>
+<p>本地 Excel 的分段号优先新段号，为空时使用总段。<code>gantt_sync.to_dicts()</code> 共享列映射，但当前没有完全复制这一分段号回退逻辑。施工部门虽然读入映射，最终 16 元素分段数组未单独保存它。</p>
+<h2 id="section-163">5. 业务计算原理</h2>
+<h3 id="section-165">5.1 日期解析与数据清洗</h3>
+<p><code>build.as_day()</code> 只接受 Python 的 <code>datetime/date</code>，所以源 Excel 应存储真正的日期单元格。<code>load_workbook(read_only=True, data_only=True)</code> 按只读方式读取公式缓存值；程序不会计算 Excel 公式。纯文本日期或未被 Excel/WPS 计算保存的公式可能无法提供预期日期。</p>
+<p><code>core.parse_day()</code> 更宽松：支持日期对象、合理区间内的 Excel 序列号、年月日字符串、斜杠/点分隔日期和部分紧凑格式。非法值、布尔值与缺失标记返回 0。在线链接先落地 Excel 的路径通过 <code>_to_date()</code> 转换日期列，尽量恢复为日期单元格。</p>
+<p>缺船号的行被跳过。<code>core.py</code> 检查九个原始节点是否至少一个有效；<code>build.py</code> 当前过滤条件没有包含“只有舾装完工”或“只有转序日期”两种情况，因此同一份稀疏数据走不同路径可能得到不同数量。吨位统一尝试转为浮点数并保留一位小数，转换失败为 0。</p>
+<h3 id="section-173">5.2 完成状态与借用转序日期</h3>
+<p>Excel 路径把船体状态中包含“完成”的行加入完成集合；通用核心路径还识别“完工”“已完工”“已交”“已转”等关键词。按船分组后，以“上胎日期，否则结构成品化日期，否则很大的排序值”和分段号排序，再反向扫描。</p>
+<p>若某个被标记完成的分段缺少转序日期，则尝试借用排序中后续可用的转序日期；找不到后续值时尝试该船已有的最晚转序日期，并要求不早于上胎日期。若整艘船完全没有转序日期，就没有可借用的值，程序不会凭空补出日期。</p>
+<p>借用日期属于显示计算的推断值，当前 payload 没有另存“原始/推断”标志，因此后续查看者无法仅从 <code>data.js</code> 区分。原 Excel 不会被回写。</p>
+<h3 id="section-181">5.3 阶段条与未完工处理</h3>
+<p>对于普通阶段，<code>barOf()</code> 的规则为：起止均缺失则没有条形；只有终点则起点取终点；只有起点且分段已完成时用转序日期兜底，否则未完工且起点不晚于快照今天时延伸到快照今天；起点在未来则先画一天；起止颠倒时交换。工期按 <code>结束 − 开始 + 1</code> 计算，是含首尾两天的自然日，不扣除周末或节假日。</p>
+<p>当前前端 <code>isDone()</code> 的判断是“结构成品化或转序日期任意一个存在”，并非只看最终转序日期。因此成品化字段已填而转序字段未填的分段，也不会按普通在建分段一直延伸到今天。</p>
+<p>船舶汇总调用严格模式 <code>barOf(..., true)</code>，不把缺终点的分段无条件延长到今天。全流程使用所有阶段有效日期的最早/最晚值，只有完全缺少有效终点时才执行其未完工延伸规则，不代表每个未结束子阶段都被单独延伸。</p>
+<p>未完工条右侧使用斜纹提示，工期带星号；无日期的当前阶段显示“— / 待定”。一条分段若所有日期都被生成器过滤掉，就不会进入前端，也不会作为“待定”行出现。</p>
+<h2 id="section-191">6. 前端实现详解</h2>
+<h3 id="section-193">6.1 <code>viewer.html</code> 的组成</h3>
+<p>样式、页面结构与行为脚本集中在一个文件中。初始化读取 <code>window.GANTT</code>，计算日期范围、构建按船分组的 <code>byHull</code>，生成船舶顺序，并建立阶段跨度缓存 <code>spanCache</code> 和分段排序缓存 <code>sortedCache</code>。</p>
+<p>主要状态包括 <code>phaseKey</code>（阶段）、<code>focus</code>（船舶索引，-1 为总览）、<code>scaleKey</code>（密度预设）、<code>rows</code>（逻辑行）、<code>px</code>（每天像素数）、<code>viewStart</code>（时间轴起日）、<code>totalDays</code>（总天数）、<code>markerDay</code>（参考日期）及 <code>customPx</code>（手动密度，null 表示使用预设）。</p>
+<p><code>rebuildRows()</code> 按搜索、单船、总览三种分支生成逻辑行。<code>computeRange()</code> 决定显示日期区间；<code>layout()</code> 设置尺寸、背景、表头与参考线；<code>bindRow()</code> 将某条逻辑记录绑定到复用的 DOM 节点。</p>
+<h3 id="section-201">6.2 行虚拟化</h3>
+<p>每行高度固定为 34 像素。<code>renderWindow()</code> 根据 <code>scrollTop</code> 和视口高度计算当前可见行，再添加上下各约六行的缓冲，只创建需要的节点数量。节点放进 <code>pool</code>，滚动时更新文本、条形和 <code>translateY()</code>，不为每个分段都创建一套 DOM。</p>
+<p>因此，几千条数据仍全部保留在内存，但实际参与页面布局的行大致为“可见行数 + 缓冲”。这降低的是 DOM 渲染成本，不是后端取数总量。滚动监听通过 <code>requestAnimationFrame</code> 合并更新，避免每次滚动事件都立即重画。</p>
+<h3 id="section-207">6.3 坐标换算</h3>
+<p>某天对应的内容坐标：</p>
+<pre><code>参考线 x = LEFT_W + (markerDay - viewStart + 0.5) × px
+阶段条 x = (开始日期 - viewStart) × px
+阶段条宽度 ≈ (结束日期 - 开始日期 + 1) × px</code></pre>
+<p>其中 <code>LEFT_W = 460</code>，参考线加半天宽度以落在当天列中心。拖动反算要同时考虑视口左边界、横向滚动量、固定信息列宽度和按下位置相对线心的偏移量。</p>
+<pre><code>日期 = viewStart + round((鼠标局部 x + scrollLeft - LEFT_W - 按下偏移) / px - 0.5)</code></pre>
+<p>最后限制在当前时间轴首日至末日之间。这样放大、缩小或横向滚动后，鼠标位置依然能映射到正确的日期，而不是把像素偏移直接当作天数。</p>
+<h3 id="section-225">6.4 拖动生命周期</h3>
+<p><code>pointerdown</code> 保存指针 ID、按下偏移和横坐标，并使用 <code>setPointerCapture()</code> 捕获后续事件；<code>pointermove</code> 更新参考日期；动画帧循环检查是否接近左右边缘，在需要时每帧滚动 12 像素。<code>pointerup</code>、<code>pointercancel</code>、捕获丢失或窗口失焦都会清理拖动状态和动画帧，避免松手后继续移动。</p>
+<p><code>updateMarker()</code> 只更新参考线位置、日期标签、可访问性属性与状态栏，不重建分段数据。标签限制在可视时间区域内；当红线横向滚到固定列后面时隐藏，避免遮挡船号。红线阻止点击冒泡，从而不会因释放鼠标误触船舶钻取。</p>
+<p>通过 <code>role=&quot;slider&quot;</code>、<code>tabindex</code> 和 <code>aria-valuetext</code> 提供键盘与辅助技术语义。<code>touch-action:none</code> 限制在拖动把手上，避免拖线时触发页面的默认触摸平移。</p>
+<h3 id="section-233">6.5 Ctrl＋滚轮连续缩放实现</h3>
+<p>查看器在滚动容器 <code>vp</code> 上以 <code>{ passive: false }</code> 注册 <code>wheel</code> 监听。只有按下 Ctrl 才调用 <code>preventDefault()</code> 拦截浏览器整页缩放，普通滚轮事件保持默认行为。根据 <code>deltaMode</code> 将像素、行和页三种滚轮单位统一换算，再通过指数倍率 <code>新密度 = 当前密度 × exp(-滚动量 × 0.002)</code> 连续改变时间间距。</p>
+<p>同一绘制帧内的滚轮变化累积到 <code>wheelZoom</code>，由 <code>requestAnimationFrame</code> 统一应用，减少重复布局。每次变化先记录红线日期对应的屏幕横坐标，然后设置 <code>customPx</code> 并调用 <code>layout(true)</code>：这里的 true 表示保留既有日期范围，只重算像素宽度、表头、背景和可见行。最后反算滚动位置：</p>
+<pre><code>新 scrollLeft = LEFT_W + (锚点日期 - viewStart) × 新 px - 锚点屏幕 x
+锚点日期 = markerDay + 0.5（红线位于当天中心）</code></pre>
+<p>这使连续缩放围绕红线发生，而不是围绕鼠标位置或总时间轴起点发生。日期超出范围时回退到可视中点；浏览器会把滚动值限制在可用区间。缩放前终止尚未结束的红线拖动，避免旧按下偏移量与新密度混用。预设按钮会清空待处理的滚轮变化与自定义密度。</p>
+<p><code>showDayHeader()</code> 根据当前密度决定日级表头与网格；导出 payload 在手动模式下据此选择 day 或 month 表头，后端仍按固定 Excel 单元格列宽输出。生产日期、工期、筛选数据和 <code>window.GANTT</code> 不参与修改。</p>
+<h3 id="section-248">6.6 <code>app.html</code> 控制台</h3>
+<p>控制台用侧边导航组织图表、取数、计划任务、日志和设置。图表嵌在 <code>viewer.html?embed=1</code> 的 iframe 中；该参数隐藏重复的品牌标题。所有后台操作通过封装的 <code>fetch()</code> 调用 HTTP API，并带 <code>X-Panel: 1</code>。</p>
+<p>启动取数任务后，前端以任务 ID 轮询进度，约每 400 毫秒读取新增日志；任务完成后显示结果，成功的数据更新会重载 iframe。总体状态每 20 秒刷新，但这一状态轮询本身不等价于持续重载图表数据。</p>
+<h2 id="section-254">7. Python 模块实现详解</h2>
+<div class="table"><table><thead><tr><th>模块</th><th>输入与输出</th><th>核心实现</th></tr></thead><tbody><tr><td><code>build.py</code></td><td>Excel → <code>data.js</code>、统计报告</td><td>openpyxl 只读迭代；固定列映射；日期与吨位处理；字典压缩；补推转序日期；直接写快照与报告</td></tr><tr><td><code>core.py</code></td><td>字典行 → 标准 payload</td><td>字段别名表、日期解析、状态判断、分组及字典池；<code>write_js()</code> 使用临时文件和 <code>os.replace()</code> 原子替换</td></tr><tr><td><code>gantt_sync.py</code></td><td>WPS webhook → 快照</td><td>配置与环境变量展开；meta 读表清单；data 分页取行；固定列映射转字典；core 生成</td></tr><tr><td><code>pull.py</code></td><td>通用 URL → 快照</td><td>GET 拉取；识别数组或常见 JSON 包装字段；否则按 CSV 读取；可按秒间隔循环</td></tr><tr><td><code>net.py</code></td><td>URL/请求头/请求体 → bytes</td><td>urllib 直连、系统代理、curl 兜底；超时和重试；HTTP 错误交由上层处理</td></tr><tr><td><code>server.py</code></td><td>HTTP 请求 → 页面/API/新快照</td><td>ThreadingHTTPServer；静态文件托管；推送鉴权、归档、构建锁；控制台 API 分派；Excel 下载</td></tr><tr><td><code>panel.py</code></td><td>控制台命令 → 任务/配置/Excel</td><td>后台线程任务、日志捕获、取数路径、系统计划任务、文件定位、状态聚合、openpyxl 导出</td></tr><tr><td><code>window.py</code></td><td>启动参数 → 本地桌面窗口</td><td>服务探测和端口选择；pywebview；本地文件选择桥接；Edge 应用窗口回退；日志与自检</td></tr><tr><td><code>paths.py</code></td><td>运行环境 → 资源和输出路径</td><td>区分源码/打包模式；<code>BASE/RES</code>；首次复制默认文件；从 Windows 注册表补充缺失环境变量</td></tr><tr><td><code>menu.py</code></td><td>控制台选择 → 对应操作</td><td>中文菜单封装取数、看图、服务、定时和配置功能</td></tr></tbody></table></div>
+<h3 id="section-269">7.1 任务管理和并发</h3>
+<p><code>panel.start_job()</code> 为任务创建 ID、状态、起止时间、日志和结果，再启动守护线程。<code>_run_job()</code> 在运行锁内执行具体函数，并临时包装标准输出，将进度送入日志缓冲。状态最终为完成或错误，前端用 <code>since</code> 游标获取增量日志。</p>
+<p>HTTP 服务器可并发处理请求。Webhook 生成过程有单独的锁，控制台任务也有自己的锁；两者并不是统一覆盖所有入口的全局写入事务。<code>core.write_js()</code> 原子替换可防止读到半份文件，但不会解决所有跨进程“最后一次写入覆盖前一次”的业务竞争。<code>build.py</code> 当前直接写目标文件，不具备同样的原子写入保障。</p>
+<h3 id="section-275">7.2 网络恢复</h3>
+<p><code>net.request()</code> 优先尝试不使用代理的 urllib opener，然后尝试系统/环境代理，最后调用 <code>curl.exe</code>。这用来应对本机曾使用代理软件、代理退出后系统仍残留无效地址的情况。</p>
+<p>网络连接失败会按重试次数再次尝试；HTTP 4xx/5xx 不会在底层当作普通代理错误吞掉。<code>gantt_sync.call()</code> 对 401/403 转换成易读的令牌错误，并处理 WPS <code>data.result</code> 可能被重复 JSON 编码的情况。</p>
+<h3 id="section-281">7.3 桌面窗口和资源定位</h3>
+<p><code>window.py</code> 先探测目标端口上是否已有本项目服务，有则复用。否则从目标端口起寻找可用端口并启动服务。正常情况下由 pywebview 打开约 1560×960 的独立窗口，通过本地 URL 加载控制台；没有可用 pywebview 时尝试 Edge 应用模式。</p>
+<p>源码运行时 <code>BASE</code> 为源文件目录；PyInstaller 打包后 <code>BASE</code> 为 EXE 所在目录，<code>RES</code> 为解包资源目录。静态文件服务先检查 <code>BASE</code>，找不到才查打包资源，因此可以在 EXE 同级放新版 <code>viewer.html</code> 覆盖内置查看器，无需更改生产数据或重新打包。</p>
+<p><code>paths.load_env()</code> 只补充进程中缺失的 Windows 用户/系统环境变量；已有值不覆盖。<code>ensure_defaults()</code> 仅在 EXE 同级缺少配置/数据文件时复制默认资源，不应当作“每次恢复默认配置”。</p>
+<h2 id="section-289">8. 在线表脚本和接口</h2>
+<h3 id="section-291">8.1 AirScript 分页协议</h3>
+<p><code>airscript_sync_task.js</code> 运行在 WPS 环境中。请求形状为：</p>
+<pre><code>{&quot;Context&quot;:{&quot;argv&quot;:{&quot;action&quot;:&quot;data&quot;,&quot;sheet&quot;:&quot;Sheet1&quot;,&quot;row_start&quot;:1,&quot;row_count&quot;:500}}}</code></pre>
+<p><code>action=meta</code> 返回工作表名称、最后行号和最后列号；<code>action=data</code> 返回二维单元格数组与下一行号。脚本依据 UsedRange 的起始行列和范围大小计算绝对末行末列，避免前面有空行时表头错位。</p>
+<p>脚本使用 <code>Application</code> 和 <code>Context</code>，顶层返回 JSON 字符串，供 WPS 放入 <code>data.result</code>。它不是普通 Node.js 脚本，不能把顶层 return 文件直接当作标准 Node 应用运行。客户端默认每次 500 行，实际由 <code>rows_per_call</code> 控制；循环按收到的行数推进。</p>
+<h3 id="section-303">8.2 推送脚本</h3>
+<p><code>wps_gantt.js</code> 是另一条接入路径：从配置的来源 URL 读取记录，或从活动工作表连续区域读取第一行表头，再用 <code>fetch()</code> 推送到本地 <code>/webhook/gantt</code>。它不是分页同步脚本的替代品。</p>
+<p>推送脚本要求所在运行环境具备网络能力并能访问目标服务器。云端 AirScript 中的 <code>127.0.0.1</code> 不指向用户电脑；无法到达本地服务时应使用本机主动拉取路径或实际可达的服务地址。</p>
+<h3 id="section-309">8.3 HTTP 路由</h3>
+<div class="table"><table><thead><tr><th>方法与路径</th><th>用途</th><th>访问要求</th></tr></thead><tbody><tr><td><code>GET /</code>、<code>/viewer.html</code></td><td>查看器</td><td>图表浏览</td></tr><tr><td><code>GET /app</code>、<code>/app.html</code>、<code>/panel</code></td><td>控制台 HTML</td><td>操作仍取决于本机 API 校验</td></tr><tr><td><code>GET /data.js</code></td><td>当前快照</td><td>响应禁止缓存</td></tr><tr><td><code>GET /health</code></td><td>健康与数据年龄</td><td>服务状态</td></tr><tr><td><code>POST /webhook/gantt</code></td><td>JSON 推送</td><td>配置的 <code>X-Token</code></td></tr><tr><td><code>POST /webhook/csv</code></td><td>CSV 推送</td><td>同上</td></tr><tr><td><code>GET /api/state</code></td><td>聚合状态</td><td>本机地址、<code>X-Panel: 1</code>、允许的 Origin</td></tr><tr><td><code>GET /api/version</code></td><td>服务版本探测</td><td>同上</td></tr><tr><td><code>POST /api/jobs</code></td><td>创建取数/检查任务</td><td>同上</td></tr><tr><td><code>GET /api/jobs/{id}</code></td><td>增量日志和结果</td><td>同上</td></tr><tr><td><code>GET/POST /api/tasks</code></td><td>查询/操作计划任务</td><td>同上</td></tr><tr><td><code>GET /api/log</code></td><td>读取日志尾部</td><td>同上</td></tr><tr><td><code>POST /api/webhook</code>、<code>/api/token</code></td><td>更新配置</td><td>同上</td></tr><tr><td><code>POST /api/reveal</code></td><td>打开目录/文件位置</td><td>同上</td></tr><tr><td><code>POST /api/export</code></td><td>Excel 二进制下载</td><td>同上</td></tr></tbody></table></div>
+<p>源码注释还提到 <code>/api/status</code>，但当前 <code>/api/*</code> 会先交给 <code>panel.api()</code>，该分发器没有 <code>/api/status</code>，所以不能把它视为有效状态接口；使用 <code>/health</code> 或 <code>/api/state</code>。</p>
+<p>本机 API 的 Origin 检查允许 localhost/127.0.0.1 的 HTTP(S) 来源，不是严格校验请求与服务端口完全相同。它是本机工具的访问限制，不是完善的用户账户权限系统。</p>
+<h2 id="section-333">9. 使用到的技术</h2>
+<div class="table"><table><thead><tr><th>技术</th><th>使用位置</th><th>解决的问题</th></tr></thead><tbody><tr><td>Python 3</td><td>后端、生成器、桌面入口</td><td>文件处理、任务编排、HTTP 服务和系统集成</td></tr><tr><td>openpyxl</td><td><code>build.py/panel.py</code></td><td>读取 Excel、生成带格式的 Excel；不会执行公式</td></tr><tr><td>HTML/CSS/原生 JavaScript</td><td>两个 HTML 页面</td><td>图表与控制台交互；无需前端构建工具</td></tr><tr><td>Pointer Events / Pointer Capture</td><td>查看器参考线</td><td>统一指针拖动、越界继续跟踪和松手清理</td></tr><tr><td>requestAnimationFrame</td><td>滚动与拖动</td><td>把界面更新安排在绘制帧内</td></tr><tr><td>WheelEvent / 非被动事件监听</td><td>查看器连续缩放</td><td>区分 Ctrl＋滚轮与普通滚动，并阻止整页缩放</td></tr><tr><td>ResizeObserver</td><td>查看器布局</td><td>容器宽度变化后重新适配时间轴</td></tr><tr><td>Fetch API</td><td>控制台/导出/推送脚本</td><td>浏览器到本地服务或脚本到服务的请求</td></tr><tr><td>Python http.server/threading</td><td><code>server.py/panel.py</code></td><td>轻量本地服务、后台任务及互斥控制</td></tr><tr><td>urllib/curl</td><td><code>net.py</code></td><td>网络访问和代理异常回退</td></tr><tr><td>pywebview / Edge WebView2</td><td><code>window.py</code></td><td>把网页封装成 Windows 桌面窗口</td></tr><tr><td>WPS AirScript</td><td>两个 JS 脚本</td><td>读取在线表和数据交换</td></tr><tr><td>Windows schtasks/setx/winreg</td><td>计划任务与配置</td><td>定时同步、环境变量写入/读取</td></tr><tr><td>PyInstaller</td><td><code>.spec</code></td><td>把 Python 入口与静态资源打包成 EXE</td></tr><tr><td>JSON/CSV</td><td>数据交换</td><td>跨模块、跨程序传输结构化记录</td></tr></tbody></table></div>
+<p>仓库未提供锁定依赖版本的 requirements 或 lock 文件，不能从目录内容推出每台部署机器上相同的运行时版本。本次交互验证使用本机 Python Playwright 和无头 Edge；它们是验证工具，不是生产功能新增依赖。</p>
+<h2 id="section-355">10. 文件、配置与运行方式</h2>
+<h3 id="section-357">10.1 主要文件和目录</h3>
+<div class="table"><table><thead><tr><th>路径</th><th>性质与用途</th></tr></thead><tbody><tr><td><code>viewer.html</code></td><td>图表源文件，也是本次功能修改点</td></tr><tr><td><code>app.html</code></td><td>桌面控制台前端</td></tr><tr><td><code>data.js</code></td><td>自动生成的数据快照，通常不手工编辑</td></tr><tr><td><code>config.json</code></td><td>服务监听地址、端口、推送令牌、归档和文件配置</td></tr><tr><td><code>gantt_config.json</code></td><td>WPS webhook、令牌、工作表、分页及输出配置</td></tr><tr><td><code>DATE/</code></td><td>在线下载表格和导出的 Excel</td></tr><tr><td><code>incoming/</code></td><td>按配置启用的推送原始数据归档目录，运行后创建</td></tr><tr><td><code>logs/</code>、<code>gantt.log</code>、<code>service.log</code></td><td>运行日志</td></tr><tr><td><code>build_report.txt</code></td><td>最近一次本地 Excel 构建统计</td></tr><tr><td><code>窗口.bat</code></td><td>桌面入口，寻找可用 Python 后执行 window.py</td></tr><tr><td><code>run.bat</code></td><td>本地 Excel 生成与打开图表</td></tr><tr><td><code>横道图.bat</code></td><td>中文控制台菜单入口</td></tr><tr><td><code>run_server.bat</code></td><td>常驻 Webhook 服务入口</td></tr><tr><td><code>分段生产横道图.spec</code></td><td>PyInstaller 打包定义</td></tr><tr><td><code>build/</code>、<code>dist/</code></td><td>打包中间文件和发布文件</td></tr><tr><td><code>_备份_窗口化_20261021/</code></td><td>历史备份，不是当前实现基准</td></tr></tbody></table></div>
+<h3 id="section-378">10.2 常用命令</h3>
+<p>以下命令在项目目录下执行，文件路径、表名和 URL 应替换成自己的实际值。</p>
+<pre><code>python window.py
+python window.py --no-window --port 8089
+python window.py --debug
+python build.py --src &quot;D:\你的目录\生产台账.xlsx&quot; --sheet Sheet1
+python gantt_sync.py --check
+python gantt_sync.py --peek
+python gantt_sync.py
+python pull.py --url &quot;https://你的数据接口&quot; --interval 300
+python server.py</code></pre>
+<p>源码默认本地 Excel 路径仍为 <code>D:\DSP6\数据更新中_在建.xlsx</code>，默认工作表为 <code>Sheet1</code>。实际文件不在此处时，应传参或从控制台选择。仅查看已生成图表无需执行取数命令。</p>
+<p>查看器支持 URL 参数 <code>hull</code>、<code>phase</code>、<code>scale</code> 和控制台嵌入参数 <code>embed=1</code>。例如 <code>viewer.html?hull=船号&amp;phase=tt&amp;scale=day</code>；船号包含特殊字符时应进行 URL 编码。</p>
+<h3 id="section-398">10.3 配置与数据边界</h3>
+<p>推送令牌属于 <code>config.json</code>，AirScript 令牌属于 <code>gantt_config.json</code> 或其环境变量引用，两个令牌不是同一个概念。配置文件可能含敏感值，应保留在自己的运行环境，本文不复制它们。</p>
+<p>独立 <code>server.py</code> 的默认 host 为 <code>0.0.0.0</code>，实际以配置为准；局域网可见范围取决于绑定地址与系统网络设置。图表静态读取与本机控制台操作有不同的访问限制。</p>
+<h2 id="section-404">11. 术语表</h2>
+<div class="table"><table><thead><tr><th>术语</th><th>本项目中的含义</th></tr></thead><tbody><tr><td>横道图 / 甘特图</td><td>用时间横轴和条形表示生产活动的图表</td></tr><tr><td>船号 / Hull</td><td>用于按船分组的业务标识，不是数组中的数值索引本身</td></tr><tr><td>分段 / Segment</td><td>船体生产管理单元，对应图中一条分段记录</td></tr><tr><td>总段</td><td>源表中的另一个段标识，本地 Excel 路径用于新段号缺失时回退</td></tr><tr><td>拼板</td><td>本工具映射的拼板开工至完工阶段</td></tr><tr><td>上胎 / 下胎</td><td>在胎阶段的起止节点，具体现场含义应与业务台账一致</td></tr><tr><td>在胎</td><td>本项目定义为上胎到下胎的时间段</td></tr><tr><td>舾装</td><td>图中使用舾装开工至销项完工的时间段</td></tr><tr><td>成品化 / 转序</td><td>第五阶段的起止节点，并参与前端完成判断</td></tr><tr><td>工期</td><td>结束减开始加一的自然日数，不是净工时</td></tr><tr><td>待定</td><td>当前阶段没有可显示日期，不一定表示整个分段没有其他日期</td></tr><tr><td>快照</td><td>某次生成时固定下来的整份 <code>data.js</code> 数据</td></tr><tr><td>参考日期</td><td>用户拖动红线选中的页面内存状态</td></tr><tr><td>纪元 / Epoch</td><td>计算整数日期的起点，本项目为 2020-01-01</td></tr><tr><td>哨兵值</td><td>表示缺失或特殊状态的数值，日期 0、字典索引 -1</td></tr><tr><td>字典压缩 / Intern</td><td>相同字符串只保存一次，记录中改存索引</td></tr><tr><td>Payload</td><td>模块或接口传递的数据对象，不等同于源 Excel 文件</td></tr><tr><td>Webhook</td><td>可供程序调用或向其推送数据的 HTTP 地址；本项目有 WPS 拉取入口和本地接收入口两种</td></tr><tr><td>AirScript</td><td>WPS 在线表提供的脚本运行环境</td></tr><tr><td>分页</td><td>分批拉取表格行，避免一次返回整个大表</td></tr><tr><td>DOM</td><td>浏览器实际创建的页面节点</td></tr><tr><td>虚拟化</td><td>只为可见数据创建或复用行节点的显示策略</td></tr><tr><td>节点池</td><td>保存可复用 DOM 行，滚动时换数据而不重复创建</td></tr><tr><td>冻结列 / Sticky</td><td>滚动时仍留在可视边缘的表格信息列或表头</td></tr><tr><td>指针捕获</td><td>按下后持续接收该指针事件，即使它移出原来的小区域</td></tr><tr><td>按天吸附</td><td>将连续鼠标坐标换算并取整到某个日期</td></tr><tr><td>防抖</td><td>等输入短暂停止后再执行筛选，减少重复计算</td></tr><tr><td>原子替换</td><td>先写完整临时文件，再一次性替换目标路径</td></tr><tr><td>回环地址</td><td>指向本机的 localhost/127.0.0.1 等地址</td></tr><tr><td>CORS / Origin</td><td>浏览器跨来源请求及其来源信息；与令牌认证是不同机制</td></tr><tr><td>iframe</td><td>在控制台页面中嵌入独立查看器页面的容器</td></tr><tr><td>WebView2</td><td>用于桌面程序嵌入 Edge 网页显示能力的运行环境</td></tr><tr><td>Frozen / <code>_MEIPASS</code></td><td>PyInstaller 打包运行状态及其临时资源目录</td></tr><tr><td>自然日 / 工作日</td><td>本项目工期采用自然日；周末底纹只作显示，不从工期扣除</td></tr></tbody></table></div>
+<h2 id="section-443">12. 本次修改、验证和维护说明</h2>
+<p>本次修改查看器的样式、参考日期状态、拖动和 Ctrl＋滚轮缩放交互，并维护项目介绍文档；后台取数、列映射和生产数据不因拖动或缩放而发生变化。</p>
+<p>浏览器验证覆盖：月视图标签拖动、线条本体拖动、日期标签与状态一致、生产数据及工期不变、不误触单船钻取、定位今天、键盘日/周步长与首尾边界、周/日缩放后横向滚动位置换算、纵向滚动后标签跟随、窗口宽度和阶段切换保留日期、边缘自动滚动、松手清理、单船进入与返回、空搜索结果。实际执行使用当前数据快照，浏览器未报告 JavaScript 页面错误。</p>
+<p>触摸和笔输入共用 Pointer Events 实现，本次未在实体触屏或触控笔设备上验证。在线 WPS、实际计划任务和外部网络连接不属于这次改动范围，未通过真实取数或改动系统任务来做验证。</p>
+<p>连续缩放的浏览器验证使用真实 Control 键与滚轮事件，覆盖逐步放大/缩小、红线屏幕锚点、固定列与浏览器缩放不变、日号和星期自动显示、普通滚轮滚动、缩放后精确拖动一天、上下限、预设恢复、单船视图、窗口尺寸与阶段切换、悬停明细和空结果。实际 Edge 浏览器未报告 JavaScript 页面错误。</p>
+<p>部署时，源码入口读取项目根目录的 <code>viewer.html</code>；已打包程序可通过 EXE 同级 <code>viewer.html</code> 覆盖内置页面。现有 ZIP 压缩包内部仍是历史发布内容，若需对外分发本次版本，应把新版覆盖文件与文档一并纳入新的分发包。页面已打开时需要刷新，或重新打开窗口以加载新文件。</p>
+<p>后续维护建议：增加生产字段时先更新数据契约；改变完成口径时同步核对 <code>build.py/core.py/viewer.html</code>；改变列顺序时检查固定映射和在线转换；修改缩放时核对拖动反算；修改导出时同时核对前端导出 payload 与后端 openpyxl 生成函数。</p>
+<h2 id="section-457">13. 已知限制及可扩展方向</h2>
+<ol><li>“今天”采用快照生成日期，页面跨日不自动推进。若要改为实时系统日期，应重新评估未完工延伸、汇总、导出和历史快照的一致性。</li><li>本地 Excel 与通用核心存在部分业务规则差异，可后续合并清洗逻辑并补齐来源/推断日期标记。</li><li>阶段切换没有主动触发全部重排；可将行排序、范围与阶段变更整理为统一状态更新入口。</li><li>空数据或只有极少有效日期的异常输入，仍需更完整的范围兜底；当前正常路径依赖生成器产出可用的分段数据。</li><li>同时运行多个取数进程时缺少跨进程写入协调。可扩展为统一队列、文件锁和原子构建发布。</li><li>当前没有生产条拖拽编辑、源表写回、撤销栈和修改审计。本次参考线拖动不代表这些能力已经实现。</li><li>导出按单元格颜色模拟横道图，不保存浏览器中的交互，也不输出临时参考线位置。若需要将选中日期带入导出，应新增明确的导出字段与样式。</li><li>图表没有工序依赖、关键路径、资源容量、节假日日历或自动排程。这些能力需要额外的业务数据和计算模型。</li></ol>
+<p>以上扩展方向只是对现状的说明，本次未把它们作为已完成功能。</p></main></body></html>

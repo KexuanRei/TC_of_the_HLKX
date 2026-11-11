@@ -1,0 +1,1147 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>分段生产横道图 · 控制台</title>
+<style>
+  :root{
+    --bg:#eef2f8; --panel:#fff; --line:#e6ecf6; --line2:#d7e0ee;
+    --ink:#16202f; --ink2:#4f5d75; --ink3:#8b97ab;
+    --accent:#2f6feb; --accent-soft:#eaf1fe;
+    --ok:#12a594; --warn:#c25b0a; --danger:#e5484d;
+    --rail:#0e1828; --rail2:#17253a; --rail-ink:#98a8c2;
+    --radius:10px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;overflow:hidden;background:var(--bg);color:var(--ink);
+    font:13px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  button,input,select,textarea{font:inherit;color:inherit}
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-thumb{background:#c6d2e4;border-radius:8px;border:3px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-track{background:transparent}
+
+  .shell{display:grid;grid-template-columns:186px 1fr;height:100vh;min-width:0}
+  .rail{display:flex;flex-direction:column;min-height:0;color:var(--rail-ink);
+    background:linear-gradient(180deg,#0e1828,#101d31 55%,#0c1524);border-right:1px solid #0a1220}
+  .logo{display:flex;align-items:center;gap:9px;padding:16px 16px 12px}
+  .logo .mark{width:30px;height:30px;border-radius:8px;flex:none;
+    background:linear-gradient(135deg,#4d8bff,#2f6feb 55%,#8b5cf6);
+    box-shadow:0 4px 12px rgba(47,111,235,.45);position:relative}
+  .logo .mark::after{content:"";position:absolute;inset:8px;border-left:2px solid rgba(255,255,255,.85);
+    border-bottom:2px solid rgba(255,255,255,.85);border-radius:1px}
+  .logo b{color:#fff;font-size:13px;letter-spacing:.4px;line-height:1.25;display:block}
+  .logo span{font-size:10px;color:#6d809c;letter-spacing:.8px}
+  nav{padding:8px;display:flex;flex-direction:column;gap:2px}
+  .nav{display:flex;align-items:center;gap:9px;height:36px;padding:0 10px;border-radius:8px;cursor:pointer;
+    background:transparent;border:1px solid transparent;color:var(--rail-ink);font-size:12.5px;text-align:left;
+    transition:background .12s,color .12s}
+  .nav svg{width:15px;height:15px;flex:none;opacity:.85}
+  .nav:hover{background:rgba(255,255,255,.06);color:#e6eefb}
+  .nav.on{background:rgba(77,139,255,.16);color:#fff;border-color:rgba(77,139,255,.34);font-weight:600}
+  .nav.on svg{opacity:1;color:#7fb0ff}
+  .rail-foot{margin-top:auto;padding:12px 14px;border-top:1px solid rgba(255,255,255,.07);font-size:11px}
+  .rail-foot .row{display:flex;align-items:center;gap:7px}
+  .dot{width:7px;height:7px;border-radius:50%;background:#4a5b74;flex:none}
+  .dot.ok{background:#2fd4b6;box-shadow:0 0 0 3px rgba(47,212,182,.16)}
+  .dot.err{background:#ff7a7e;box-shadow:0 0 0 3px rgba(255,122,126,.16)}
+
+  main{display:flex;flex-direction:column;min-width:0;min-height:0}
+  .topbar{flex:none;display:flex;align-items:center;gap:14px;height:52px;padding:0 16px;
+    background:var(--panel);border-bottom:1px solid var(--line2)}
+  .tb-title{font-size:14px;font-weight:700;letter-spacing:.2px}
+  .tb-meta{display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden}
+  .chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:11px;
+    background:#f2f5fb;border:1px solid var(--line2);color:var(--ink2);font-size:11px;white-space:nowrap}
+  .chip.ok{background:#e9f8f4;border-color:#bfe9df;color:#0b7a6d}
+  .chip.warn{background:#fff2e4;border-color:#f3d5b3;color:#a54d06}
+  .chip.err{background:#fdeced;border-color:#f6c9cb;color:#b3272c}
+  .tb-actions{margin-left:auto;display:flex;align-items:center;gap:8px}
+
+  .btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:8px;cursor:pointer;
+    background:#fff;border:1px solid var(--line2);color:var(--ink2);font-size:12px;white-space:nowrap;
+    transition:border-color .12s,color .12s,background .12s,box-shadow .12s}
+  .btn:hover{border-color:#b9cbe8;color:var(--ink);box-shadow:0 1px 3px rgba(22,32,47,.07)}
+  .btn:active{transform:translateY(1px)}
+  .btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
+  .btn.primary{background:linear-gradient(180deg,#3d7bf0,#2f6feb);border-color:#2a62d4;color:#fff;
+    box-shadow:0 2px 6px rgba(47,111,235,.28)}
+  .btn.primary:hover{background:linear-gradient(180deg,#4a86f5,#2a68e0);color:#fff}
+  .btn.danger{color:#b3272c;border-color:#f2c7c9;background:#fdf3f3}
+  .btn.danger:hover{background:#fdeaea;border-color:#eab3b6}
+  .btn.sm{height:26px;padding:0 9px;font-size:11.5px;border-radius:7px}
+  .mini{height:24px;padding:0 8px;border-radius:6px;border:1px solid var(--line2);background:#fff;
+    color:var(--ink2);font-size:11.5px;cursor:pointer}
+  .mini:hover{border-color:#b9cbe8;color:var(--ink)}
+
+  .split{position:relative;display:inline-flex;align-items:center}
+  .split .btn.split-main{border-radius:8px 0 0 8px}
+  .split .btn.split-caret{border-radius:0 8px 8px 0;border-left:1px solid rgba(255,255,255,.32);
+    padding:0 9px;margin-left:-1px;box-shadow:none;font-size:10px}
+  .split .menu{position:absolute;top:calc(100% + 6px);right:0;min-width:152px;z-index:120;
+    background:#fff;border:1px solid var(--line2);border-radius:9px;box-shadow:0 10px 28px rgba(22,32,47,.18);
+    padding:4px;display:none}
+  .split .menu.on{display:block}
+  .split .menu .mi{display:flex;align-items:center;gap:8px;width:100%;height:31px;padding:0 10px;border:0;
+    background:transparent;border-radius:6px;color:var(--ink2);font-size:12px;text-align:left;cursor:pointer}
+  .split .menu .mi:hover{background:#f2f6fc;color:var(--ink)}
+  .split .menu .mi .tick{width:14px;flex:none;color:var(--accent);font-size:11px;visibility:hidden}
+  .split .menu .mi.on{color:var(--ink);font-weight:600}
+  .split .menu .mi.on .tick{visibility:visible}
+
+  .views{position:relative;flex:1;min-height:0}
+  .view{position:absolute;inset:0;overflow:auto;padding:14px;display:none}
+  .view.on{display:block}
+  .view[data-view="gantt"]{padding:0;overflow:hidden;background:#fff}
+  #frame{width:100%;height:100%;border:0;display:block;background:#fff}
+
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;align-items:start}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:0 1px 2px rgba(22,32,47,.04);overflow:hidden}
+  .card + .card{margin-top:14px}
+  .card-h{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line);
+    background:linear-gradient(#fcfdff,#f8fafd)}
+  .card-h b{font-size:12.5px;letter-spacing:.2px}
+  .card-h .h-actions{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .card-b{padding:14px}
+  .note{margin:0;padding:0 14px 13px;color:var(--ink3);font-size:11.5px;line-height:1.6}
+  .hint{margin:10px 14px 14px;color:var(--ink3);font-size:11.5px;line-height:1.6}
+  .hint.warn-note{margin:10px 0 0;color:#a54d06}
+
+  .form{display:flex;flex-direction:column;gap:11px;padding:14px}
+  .form .row{display:flex;gap:10px}
+  .form .row > label{flex:1;min-width:0}
+  .form .row > label.narrow{flex:0 0 104px}
+  label{display:flex;flex-direction:column;gap:5px;font-size:11.5px;color:var(--ink2)}
+  input[type=text],input[type=password],input[type=number],select{
+    height:30px;padding:0 9px;border:1px solid var(--line2);border-radius:7px;background:#fff;
+    font-size:12px;color:var(--ink);min-width:0;width:100%}
+  input:focus,select:focus{outline:0;border-color:#7ba6f0;box-shadow:0 0 0 3px rgba(47,111,235,.12)}
+  select{cursor:pointer}
+  .chk{flex-direction:row;align-items:center;gap:7px;font-size:11.5px;color:var(--ink2);cursor:pointer}
+  .chk input{width:14px;height:14px;accent-color:var(--accent);cursor:pointer}
+  .form-actions{display:flex;flex-wrap:wrap;gap:8px;padding-top:2px}
+
+  .mono{font-family:"Cascadia Mono","Consolas","Courier New",monospace;font-size:11px;word-break:break-all}
+
+  table.grid{width:100%;border-collapse:collapse;font-size:11.5px}
+  table.grid th{text-align:left;color:var(--ink3);font-weight:600;padding:5px 8px;border-bottom:1px solid var(--line2);
+    background:#fbfcff;position:sticky;top:0;white-space:nowrap}
+  table.grid td{padding:4px 8px;border-bottom:1px solid var(--line);color:var(--ink2);
+    max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  table.grid tr.hdr td{background:#f4f7fd;color:var(--ink);font-weight:600}
+
+  table.map{width:100%;border-collapse:collapse;font-size:12px}
+  table.map th{position:sticky;top:0;background:#fbfcff;text-align:left;color:var(--ink3);
+    font-weight:600;font-size:11px;padding:7px 8px;border-bottom:1px solid var(--line2)}
+  table.map td{padding:4px 8px;border-bottom:1px solid var(--line);color:var(--ink2)}
+  table.map td.f{color:var(--ink);font-weight:600;white-space:nowrap}
+  .map-body{padding:6px 14px 14px;overflow:auto;max-height:44vh}
+  .empty{padding:22px;text-align:center;color:var(--ink3);font-size:12px}
+
+  .view[data-view="logs"] .card{height:100%;display:flex;flex-direction:column}
+  .tabs{display:flex;gap:4px;background:#f1f4fa;border:1px solid var(--line2);border-radius:8px;padding:2px}
+  .tab{height:24px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:var(--ink2);
+    font-size:11.5px;cursor:pointer}
+  .tab.on{background:#fff;color:var(--accent);font-weight:600;box-shadow:0 1px 2px rgba(22,32,47,.12)}
+  .log{flex:1;margin:0;padding:11px 14px;overflow:auto;background:#0f1724;color:#c7d4e8;
+    font:11.5px/1.6 "Cascadia Mono","Consolas","Courier New",monospace;white-space:pre-wrap;word-break:break-all}
+  .view[data-view="logs"] .log{border-radius:0 0 var(--radius) var(--radius)}
+
+  .dock{flex:none;display:none;flex-direction:column;height:238px;background:var(--panel);
+    border-top:1px solid var(--line2);min-height:0}
+  .dock.open{display:flex}
+  .dock-h{display:flex;align-items:center;gap:10px;padding:7px 14px;background:#f8fafd;border-bottom:1px solid var(--line)}
+  .dock-h b{font-size:12px}
+  .dock-meta{font-size:11px;color:var(--ink3);font-variant-numeric:tabular-nums}
+  .dock-h .spacer{margin-left:auto}
+  .pill{display:inline-flex;align-items:center;gap:6px;height:21px;padding:0 9px;border-radius:11px;
+    font-size:11px;background:#eef2f8;color:var(--ink2);border:1px solid var(--line2)}
+  .pill::before{content:"";width:6px;height:6px;border-radius:50%;background:#9aa8bd}
+  .pill.run{background:#fff4e0;border-color:#f2d9ad;color:#8a5307}
+  .pill.run::before{background:#e39a26;animation:blink 1s infinite}
+  .pill.ok{background:#e7f7f2;border-color:#bfe9de;color:#0b7a6d}
+  .pill.ok::before{background:#12a594}
+  .pill.err{background:#fdeced;border-color:#f6c9cb;color:#b3272c}
+  .pill.err::before{background:#e5484d}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+  .dock-body{flex:1;min-height:0;display:flex;flex-direction:column}
+  .dock .log{flex:1;border:0;border-radius:0;background:#0e1624}
+  .dock-result{flex:none;max-height:150px;overflow:auto;padding:10px 14px;border-top:1px solid var(--line);background:#fcfdff}
+  .dock-result:empty{display:none}
+  .res-grid{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:9px}
+  .res-grid div{display:flex;flex-direction:column;gap:1px}
+  .res-grid b{font-size:15px;font-variant-numeric:tabular-nums;letter-spacing:.2px}
+  .res-grid span{font-size:10.5px;color:var(--ink3)}
+  .res-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+  .statusbar{flex:none;display:flex;align-items:center;gap:16px;height:27px;padding:0 14px;
+    background:#f7f9fd;border-top:1px solid var(--line2);font-size:11px;color:var(--ink3);
+    white-space:nowrap;overflow:hidden}
+  .statusbar .s-item{display:inline-flex;align-items:center;gap:5px}
+  .statusbar b{color:var(--ink2);font-weight:600;font-variant-numeric:tabular-nums}
+  .statusbar .spacer{margin-left:auto}
+
+  .toast-wrap{position:fixed;right:16px;bottom:38px;display:flex;flex-direction:column;gap:8px;z-index:99}
+  .toast{min-width:200px;max-width:380px;background:rgba(18,27,42,.95);color:#e8eefa;border-radius:9px;
+    padding:9px 12px;font-size:12px;line-height:1.5;box-shadow:0 10px 26px rgba(8,14,24,.3);
+    animation:tin .16s ease-out;word-break:break-word}
+  .toast.err{background:rgba(140,32,36,.96)}
+  .toast.ok{background:rgba(9,92,78,.96)}
+  @keyframes tin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  .kv{display:grid;grid-template-columns:120px 1fr;gap:6px 12px;padding:14px;font-size:12px}
+  .kv dt{color:var(--ink3)}
+  .kv dd{margin:0;color:var(--ink2);overflow-wrap:anywhere}
+  .kv dd a{color:var(--accent);text-decoration:none}
+  .kv dd a:hover{text-decoration:underline}
+  .status-row{display:flex;align-items:center;gap:10px;padding:12px 14px;flex-wrap:wrap}
+  .big-state{font-size:15px;font-weight:700}
+  .muted{color:var(--ink3);font-size:11.5px}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="logo">
+      <div class="mark"></div>
+      <div><b>分段生产横道图</b><span>GANTT WINDOW</span></div>
+    </div>
+    <nav>
+      <button class="nav on" data-view="gantt">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h9M4 12h13M4 18h7"/><path d="M17 4v4M20 10v4M14 16v4" stroke-width="1.6"/></svg>
+        横道图
+      </button>
+      <button class="nav" data-view="data">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v11"/><path d="M8 10l4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        取数与出图
+      </button>
+      <button class="nav" data-view="tasks">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
+        定时任务
+      </button>
+      <button class="nav" data-view="logs">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 4h11l3 3v13H5z"/><path d="M8 10h8M8 14h8M8 18h5"/></svg>
+        日志
+      </button>
+      <button class="nav" data-view="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        设置
+      </button>
+    </nav>
+    <div class="rail-foot">
+      <div class="row"><i class="dot" id="railDot"></i><span id="railText">正在连接服务…</span></div>
+    </div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div class="tb-title" id="viewTitle">横道图</div>
+      <div class="tb-meta" id="tbMeta"></div>
+      <div class="tb-actions">
+        <button class="btn" id="btnRefresh">刷新横道图</button>
+        <div class="split" id="quickSyncSplit">
+          <button class="btn primary split-main" id="btnQuickSync">拉取并出图</button>
+          <button class="btn primary split-caret" id="btnQuickSyncCaret" title="选择出图方式" aria-haspopup="true">▾</button>
+          <div class="menu" id="quickSyncMenu">
+            <button class="mi" data-mode="sync"><span class="tick">✓</span>令牌出图</button>
+            <button class="mi on" data-mode="link"><span class="tick">✓</span>下载出图</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="views">
+      <!-- ============ 横道图 ============ -->
+      <section class="view on" data-view="gantt">
+        <iframe id="frame" src="viewer.html?embed=1" title="分段生产横道图"></iframe>
+      </section>
+
+      <!-- ============ 取数与出图 ============ -->
+      <section class="view" data-view="data">
+        <div class="grid2">
+          <div class="card">
+            <div class="card-h"><b>在线表链接（推荐）</b><span class="chip" id="linkChip">下载 → DATE → 出图</span></div>
+            <div class="form">
+              <label>在线表链接（kdocs 分享链接 / AirScript webhook / .xlsx 下载链接）
+                <input id="linkUrl" placeholder="https://www.kdocs.cn/l/…">
+              </label>
+              <div class="row">
+                <label>表名
+                  <input id="linkSheet" placeholder="留空 = 自动取第一张">
+                </label>
+                <label class="narrow">落盘目录
+                  <input value="DATE" disabled>
+                </label>
+              </div>
+              <div class="form-actions">
+                <button class="btn primary" id="btnRunLink">下载并生成横道图</button>
+                <button class="btn" id="btnOpenLink" title="先用下载专用 Edge 打开并登录 kdocs">打开链接（登录）</button>
+              </div>
+            </div>
+            <p class="note">粘贴 kdocs/WPS 分享链接（或 .xlsx 直接下载链接）后点「下载并生成横道图」：程序用已登录的 Edge 直接把在线表下载到程序根目录的 <span class="mono">DATE</span> 文件夹，再从 DATE 里读 Excel 出图。下载用的 Edge 窗口会放到另一个 Windows 虚拟桌面（按 Win+Tab 可看到），不遮挡你的桌面；首次使用请先点「打开链接（登录）」弹出可见窗口登录 kdocs（登录态会保留，之后无需重复登录）。直接粘贴 AirScript webhook 仍沿用原 webhook 拉取路径。依赖 <span class="mono">playwright</span>（使用系统 Edge，首次请运行 <span class="mono">pip install playwright</span>）。</p>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><b>在线拉取（webhook）</b><span class="chip" id="hookChip">—</span></div>
+            <div class="form">
+              <label>webhook（程序取数靠它，不是分享链接）
+                <input id="webhook" placeholder="https://www.kdocs.cn/api/v3/ide/file/…/sync_task">
+              </label>
+              <div class="row">
+                <label>表名
+                  <input id="sheet" placeholder="留空 = 自动取第一张">
+                </label>
+                <label class="narrow">超时(秒)
+                  <input id="timeout" type="number" min="10" max="600" value="120">
+                </label>
+              </div>
+              <div class="form-actions">
+                <button class="btn primary" id="btnRunSync">保存并拉取出图</button>
+                <button class="btn" id="btnSaveHook">只保存 webhook</button>
+                <button class="btn" id="btnSheets">列出工作表</button>
+                <button class="btn" id="btnPeek">预览前几行</button>
+              </div>
+            </div>
+            <p class="note">「保存并拉取出图」= 菜单 1：先把 webhook/表名写进 gantt_config.json，再拉全量 → 出图。几万行要几十秒。</p>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><b>本地 Excel（离线）</b><span class="chip">不联网</span></div>
+            <div class="form">
+              <label>Excel 文件
+                <select id="excelSel"></select>
+                <input id="excelSrc" placeholder="D:\DSP6\数据更新中_在建.xlsx" style="margin-top:6px">
+              </label>
+              <div class="row">
+                <label>工作表
+                  <input id="excelSheet" value="Sheet1">
+                </label>
+                <label class="narrow">表头行数
+                  <input id="excelHeader" type="number" min="1" max="20" value="4" disabled>
+                </label>
+              </div>
+              <div class="form-actions">
+                <button class="btn primary" id="btnRunOffline">生成横道图</button>
+                <button class="btn" id="btnBrowse">浏览…</button>
+              </div>
+            </div>
+            <p class="note">离线路径 = 菜单 4，走 build.py 的固定列映射（表头 4 行）。列位置见下方「列映射」表。</p>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <div class="card-h"><b>列映射（固定，来自 build.py）</b><span class="chip" id="mapChip">—</span></div>
+          <div class="map-body" id="mapBody"></div>
+        </div>
+      </section>
+
+      <!-- ============ 定时任务 ============ -->
+      <section class="view" data-view="tasks">
+        <div class="grid2">
+          <div class="card">
+            <div class="card-h"><b>计划任务</b><span class="chip" id="taskChip">—</span></div>
+            <div class="kv" id="taskInfo"></div>
+          </div>
+          <div class="card">
+            <div class="card-h"><b>安装 / 重建</b></div>
+            <div class="form">
+              <label>每多少分钟自动拉取并出图一次
+                <input id="taskMinutes" type="number" min="5" max="1440" value="120">
+              </label>
+              <div class="form-actions">
+                <button class="btn primary" id="btnTaskInstall">安装 / 重建</button>
+                <button class="btn" id="btnTaskRun">立即运行一次</button>
+              </div>
+              <div class="form-actions">
+                <button class="btn" id="btnTaskPause">暂停</button>
+                <button class="btn" id="btnTaskResume">恢复</button>
+                <button class="btn danger" id="btnTaskDelete">删除</button>
+              </div>
+            </div>
+            <p class="note">任务在 Windows 计划任务里登记为「Gantt_Sync」，后台跑 gantt_sync.py（拉数+出图），不弹窗口。改完 webhook 直接「立即运行」或重建即可。</p>
+          </div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <div class="card-h"><b>说明</b></div>
+          <div class="note" style="padding-top:13px">
+            定时任务 = 菜单 7/8/9。它是给「同一张表定期刷新」用的：设好 webhook 和令牌后，每 N 分钟自动从在线表拉最新数据重出图。<br>
+            当前数据源、令牌状态看顶部状态栏；令牌没设置时任务会失败（日志里有原因）。
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 日志 ============ -->
+      <section class="view" data-view="logs">
+        <div class="card">
+          <div class="card-h">
+            <div class="tabs">
+              <button class="tab on" data-log="gantt">取数日志 gantt.log</button>
+              <button class="tab" data-log="service">服务日志 service.log</button>
+              <button class="tab" data-log="window">窗口日志 window.log</button>
+            </div>
+            <div class="h-actions">
+              <label class="chk"><input type="checkbox" id="logAuto" checked>自动刷新</label>
+              <button class="mini" id="btnLogRefresh">刷新</button>
+              <button class="mini" id="btnLogOpen">打开程序文件夹</button>
+            </div>
+          </div>
+          <pre class="log" id="logBody"></pre>
+        </div>
+      </section>
+
+      <!-- ============ 设置 ============ -->
+      <section class="view" data-view="settings">
+        <div class="grid2">
+          <div class="card">
+            <div class="card-h"><b>AirScript 令牌</b><span class="chip" id="tokChip">未设置</span></div>
+            <div class="form">
+              <label>令牌
+                <input id="tokInput" type="password" placeholder="从 AirScript 菜单复制的令牌">
+              </label>
+              <label class="chk"><input type="checkbox" id="tokPersist">同时写入用户环境变量（新窗口也生效）</label>
+              <div class="form-actions">
+                <button class="btn primary" id="btnSaveToken">保存令牌</button>
+                <button class="btn" id="btnCheckToken">检查令牌（真连一次）</button>
+                <button class="btn" id="btnClearToken">清除</button>
+              </div>
+            </div>
+            <p class="note">令牌存在环境变量 WPS_AIRSCRIPT_TOKEN（gantt_config.json 里是 <span class="mono">${ENV:WPS_AIRSCRIPT_TOKEN}</span> 占位）。写入用户环境变量后，新开的窗口/定时任务才看得到。</p>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><b>Webhook 服务</b><span class="chip ok">窗口开着 = 服务在跑</span></div>
+            <div class="kv" id="srvInfo"></div>
+            <div class="form" style="padding-top:0">
+              <div class="form-actions">
+                <button class="btn" id="btnCopyPush">复制推送地址</button>
+                <button class="btn" id="btnOpenBrowser">用浏览器打开</button>
+                <button class="btn" data-reveal="base">程序文件夹</button>
+              </div>
+            </div>
+            <p class="note">接收 WPS 主动推送（POST /webhook/gantt）需要这个服务在跑；窗口本身就是服务，关掉窗口即停。要常驻后台用 run_server.bat。</p>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <div class="card-h"><b>默认下载链接</b><span class="chip" id="linkDefChip">—</span></div>
+          <div class="form">
+            <label>「下载出图」默认使用的在线表链接（留空 = 每次手动粘贴）
+              <input id="linkDefInput" placeholder="https://www.kdocs.cn/l/…">
+            </label>
+            <div class="form-actions">
+              <button class="btn primary" id="btnSaveLinkDef">保存默认链接</button>
+            </div>
+          </div>
+          <p class="note">点顶栏「拉取并出图」（下载出图方式）或「下载并生成横道图」时，若「在线表链接」栏为空，就用这个默认链接。</p>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <div class="card-h"><b>当前数据</b><span class="chip" id="dataChip">—</span></div>
+          <div class="kv" id="dataInfo"></div>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <div class="card-h"><b>进度条改动存档</b></div>
+          <div class="form">
+            <label class="chk"><input type="checkbox" id="resetOnRebuild" checked>出图时自动清空存档（拉取 / 本地文件 / 在线下载重出图后恢复初始）</label>
+          </div>
+          <p class="note">拖动进度条的改动现在会直接写回 <span class="mono">data.js</span>（成为真数据），并在程序目录保留 <span class="mono">data.js.orig</span> 原始备份，可用查看器右上角「恢复原始」还原。任何方式重新生成横道图（拉取在线表、本地 Excel 出图、下载在线表出图）都会从原始数据重来、覆盖这些改动。</p>
+        </div>
+      </section>
+    </div>
+
+    <div class="dock" id="dock">
+      <div class="dock-h">
+        <span class="pill" id="dockPill">空闲</span>
+        <b id="dockTitle">任务</b>
+        <span class="dock-meta" id="dockMeta"></span>
+        <span class="spacer"></span>
+        <button class="mini" id="dockClear">清屏</button>
+        <button class="mini" id="dockHide">收起</button>
+      </div>
+      <div class="dock-body">
+        <pre class="log" id="dockLog"></pre>
+        <div class="dock-result" id="dockResult"></div>
+      </div>
+    </div>
+
+    <footer class="statusbar">
+      <span class="s-item"><i class="dot" id="srvDot"></i><span id="srvText">连接中…</span></span>
+      <span class="s-item">数据表 <b id="stSheet">—</b></span>
+      <span class="s-item">令牌 <b id="stToken">—</b></span>
+      <span class="s-item">定时任务 <b id="stTask">—</b></span>
+      <span class="s-item">数据 <b id="stData">—</b></span>
+      <span class="spacer"></span>
+      <span class="s-item" id="stHint"></span>
+    </footer>
+  </main>
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var VIEWS = {
+    gantt:   { title: '横道图',     hint: '点击左侧船号行钻进这艘船；右上角切阶段、搜索、缩放' },
+    data:    { title: '取数与出图', hint: 'webhook 拉数 / 本地 Excel 出图，进度看下方任务面板' },
+    tasks:   { title: '定时任务',   hint: '自动定期从在线表拉最新数据并重出图' },
+    logs:    { title: '日志',       hint: '取数日志 / 服务日志 / 窗口日志' },
+    settings:{ title: '设置',       hint: '令牌、Webhook 服务、目录入口' }
+  };
+
+  var S = {
+    state: null, view: 'gantt', logName: 'gantt', logTimer: null,
+    job: null, native: false, dataFilled: false, hookDirty: false, excelFilled: false,
+    quickMode: 'link'
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var els = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
+
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function num(n) { return (n == null || n === '') ? '—' : Number(n).toLocaleString('zh-CN'); }
+  function bytes(n) {
+    if (!n) { return '0 B'; }
+    if (n < 1024) { return n + ' B'; }
+    if (n < 1048576) { return (n / 1024).toFixed(1) + ' KB'; }
+    return (n / 1048576).toFixed(2) + ' MB';
+  }
+  function host(url) {
+    try { return new URL(url).host; } catch (e) { return url || ''; }
+  }
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function currentLinkUrl() {
+    var v = ($('linkUrl').value || '').trim();
+    if (v) { return v; }
+    return ((S.state && S.state.cfg && S.state.cfg.link_url) || '').trim();
+  }
+
+  function toast(msg, kind) {
+    var box = document.createElement('div');
+    box.className = 'toast' + (kind ? ' ' + kind : '');
+    box.textContent = String(msg);
+    $('toasts').appendChild(box);
+    setTimeout(function () {
+      box.style.transition = 'opacity .2s'; box.style.opacity = '0';
+      setTimeout(function () { box.remove(); }, 220);
+    }, kind === 'err' ? 7000 : 3200);
+  }
+
+  async function api(method, path, body) {
+    var opt = { method: method, headers: { 'X-Panel': '1' }, cache: 'no-store' };
+    if (body !== undefined) {
+      opt.headers['Content-Type'] = 'application/json';
+      opt.body = JSON.stringify(body);
+    }
+    var res = await fetch(path, opt);
+    var data = {};
+    try { data = await res.json(); } catch (e) { /* 非 JSON */ }
+    if (!res.ok || data.ok === false) { throw new Error(data.error || ('HTTP ' + res.status)); }
+    return data;
+  }
+
+  function switchView(name) {
+    if (!VIEWS[name]) { return; }
+    S.view = name;
+    els('.nav').forEach(function (b) { b.classList.toggle('on', b.dataset.view === name); });
+    els('.view').forEach(function (v) { v.classList.toggle('on', v.dataset.view === name); });
+    $('viewTitle').textContent = VIEWS[name].title;
+    $('stHint').textContent = VIEWS[name].hint;
+    $('btnRefresh').style.display = (name === 'gantt') ? '' : 'none';
+    if (name === 'logs') { loadLog(); }
+    if (name === 'data') { fillDataInputs(); }
+    if (name === 'tasks') { refreshTasks(); }
+    if (name === 'settings') { renderSettings(); }
+  }
+
+  els('.nav').forEach(function (b) {
+    b.addEventListener('click', function () { switchView(b.dataset.view); });
+  });
+
+  function renderAll() {
+    var st = S.state;
+    if (!st) { return; }
+    var c = st.cfg || {};
+    var d = st.data || {};
+    var tok = st.token || {};
+    var meta = '<span class="chip" title="webhook">' + esc(c.webhook_short || '（未设置 webhook）') + '</span>';
+    if (c.sheet) { meta += '<span class="chip">表：' + esc(c.sheet) + '</span>'; }
+    if (d.exists) {
+      meta += '<span class="chip" title="data.js 生成时间">数据 ' + esc(d.gen || d.mtime || '') + '</span>';
+      meta += '<span class="chip">' + num(d.blocks) + ' 段 / ' + num(d.hulls) + ' 船</span>';
+    } else {
+      meta += '<span class="chip warn">还没有 data.js</span>';
+    }
+    $('tbMeta').innerHTML = meta;
+
+    $('srvDot').className = 'dot ok';
+    $('railDot').className = 'dot ok';
+    $('srvText').textContent = '服务就绪';
+    $('railText').textContent = 'v' + (st.panel || '') + ' · ' + (st.server ? st.server.port : '');
+    $('stSheet').textContent = c.sheet || '自动取第一张';
+    $('stToken').textContent = tok.effective ? ('已设置 · ' + (tok.env_len || '?')) : '未设置';
+    $('stToken').style.color = tok.effective ? '' : '#c25b0a';
+    var t = st.task || {};
+    $('stTask').textContent = t.installed ? t.label : '未安装';
+    $('stData').textContent = d.exists ? (num(d.blocks) + ' 段 · ' + esc(d.mtime || '')) : '无数据';
+    $('stHint').textContent = VIEWS[S.view].hint;
+
+    $('hookChip').textContent = c.webhook ? host(c.webhook) : '未设置';
+    $('hookChip').className = 'chip' + (c.webhook ? '' : ' warn');
+    renderColumns();
+    renderSettings();
+    renderMeta(d);
+  }
+
+  function renderMeta(d) {
+    var chip = $('dataChip');
+    chip.textContent = d.exists ? ('更新于 ' + (d.mtime || '?')) : '还没有数据';
+    chip.className = 'chip' + (d.exists ? ' ok' : ' warn');
+  }
+
+  function fillDataInputs() {
+    var st = S.state;
+    if (!st || !st.cfg) { return; }
+    var c = st.cfg;
+    if (!S.hookDirty) {
+      if (!$('webhook').value) { $('webhook').value = c.webhook || ''; }
+      if (!$('sheet').value) { $('sheet').value = c.sheet || ''; }
+    }
+    if (!$('linkUrl').value) { $('linkUrl').value = c.link_url || ''; }
+    if (!S.dataFilled) {
+      $('timeout').value = c.timeout || 120;
+      S.dataFilled = true;
+    }
+    renderExcel();
+  }
+
+  function renderExcel() {
+    var st = S.state;
+    if (!st || !st.excel || S.excelFilled) { return; }
+    var list = st.excel || [];
+    var sel = $('excelSel');
+    var def = $('excelSrc').value || '';
+    sel.innerHTML = '<option value="">（选一个，或手动填路径）</option>' + list.map(function (e) {
+      return '<option value="' + esc(e.path) + '"' + (e.path === def ? ' selected' : '') + '>' +
+        esc(e.name) + ' · ' + esc(e.mtime) + ' · ' + bytes(e.size) + (e.why === 'build.py 默认' ? '（默认）' : '') + '</option>';
+    }).join('');
+    if (!def && list.length) {
+      var best = list[0];
+      $('excelSrc').value = best.path;
+      $('excelSel').value = best.path;
+      S.excelFilled = true;
+    }
+  }
+
+  function renderColumns() {
+    var cols = (S.state && S.state.columns) || [];
+    var box = $('mapBody');
+    $('mapChip').textContent = cols.length ? (cols.length + ' 个字段 · 表头 4 行') : '读不到 build.py 的映射';
+    if (!cols.length) { box.innerHTML = '<div class="empty">列映射在 build.py 里（COL 常量）</div>'; return; }
+    var rows = cols.map(function (f) {
+      return '<tr><td class="f">' + esc(f.cn) + '</td><td class="mono">' + esc(f.key) + '</td><td>第 ' + f.col + ' 列</td></tr>';
+    }).join('');
+    box.innerHTML = '<table class="map"><thead><tr><th>字段</th><th>键</th><th>列号（1 基）</th></tr></thead><tbody>' +
+      rows + '</tbody></table><p class="hint">这套列位置是「临时」表量过的固定值；换一张列结构不同的表要在 build.py 里改 COL。</p>';
+  }
+
+  function renderSettings() {
+    var st = S.state;
+    if (!st || !st.server) { return; }
+    var tok = st.token || {};
+    var chip = $('tokChip');
+    chip.textContent = tok.effective ? ('已设置 · ' + (tok.env_len || '?') + ' 位') : '未设置';
+    chip.className = 'chip' + (tok.effective ? ' ok' : ' warn');
+    $('tokInput').placeholder = tok.effective ? '已设置（重新粘贴可覆盖）' : '从 AirScript 菜单复制的令牌';
+
+    $('resetOnRebuild').checked = (st.cfg && st.cfg.reset_edits_on_rebuild !== false);
+
+    var linkDef = (st.cfg && st.cfg.link_url) || '';
+    if (!$('linkDefInput').value) { $('linkDefInput').value = linkDef; }
+    $('linkDefChip').textContent = linkDef ? '已设置' : '未设置';
+    $('linkDefChip').className = 'chip' + (linkDef ? ' ok' : ' warn');
+
+    var svc = st.server;
+    $('srvInfo').innerHTML =
+      '<dt>服务地址</dt><dd><a href="' + esc(svc.url) + '" data-ext="' + esc(svc.url) + '">' + esc(svc.url) + '</a></dd>' +
+      '<dt>监听</dt><dd>' + esc(svc.host || '') + ':' + esc(svc.port || '') + '</dd>' +
+      '<dt>推送地址</dt><dd class="mono">' + esc(svc.push_url) + '</dd>' +
+      '<dt>推送令牌</dt><dd>' + (svc.push_token ? '已设置（config.json）' : '未设置（仅建议本机用）') + '</dd>' +
+      '<dt>面板版本</dt><dd>v' + esc(st.panel || '') + ' · Python ' + esc(st.python || '') + '</dd>';
+
+    var d = st.data || {};
+    $('dataInfo').innerHTML =
+      '<dt>data.js</dt><dd>' + (d.exists ? (bytes(d.size) + ' · 更新于 ' + esc(d.mtime || '')) : '还没有生成') + '</dd>' +
+      '<dt>数据来源</dt><dd>' + esc(d.source || '—') + '</dd>' +
+      '<dt>分段 / 船</dt><dd>' + num(d.blocks) + ' 段 / ' + num(d.hulls) + ' 艘</dd>' +
+      '<dt>时段</dt><dd>' + (d.range && d.range.length ? (esc(d.range[0]) + ' ~ ' + esc(d.range[1])) : '—') + '</dd>';
+  }
+
+  function setConnState(ok, text) {
+    $('srvDot').className = 'dot ' + (ok ? 'ok' : 'err');
+    $('railDot').className = 'dot ' + (ok ? 'ok' : 'err');
+    $('srvText').textContent = text;
+    $('railText').textContent = ok ? ('窗口界面 · ' + ((S.state && S.state.server && S.state.server.port) || '')) : text;
+  }
+
+  async function loadState(silent) {
+    try {
+      S.state = await api('GET', '/api/state');
+      renderAll();
+      fillDataInputs();
+      setConnState(true, '服务就绪');
+      return true;
+    } catch (err) {
+      var localOnly = /只允许本机|403/.test(err.message);
+      setConnState(false, localOnly ? '界面只支持本机窗口' : '服务未就绪');
+      if (!silent) {
+        toast(localOnly ? '这个页面只能在本机窗口打开（接口只允许本机）。局域网看图用 /viewer.html。'
+          : ('读取状态失败：' + err.message), 'err');
+      }
+      return false;
+    }
+  }
+
+  function refreshFrame() {
+    var f = $('frame');
+    f.src = 'viewer.html?embed=1&t=' + Date.now();
+  }
+
+  /* ---------------- 任务面板 ---------------- */
+  function dockOpen(title) {
+    $('dock').classList.add('open');
+    $('dockTitle').textContent = title || '任务';
+    $('dockMeta').textContent = '';
+  }
+  function setPill(state, text) {
+    var p = $('dockPill');
+    p.className = 'pill ' + (state || '');
+    p.textContent = text || { run: '运行中', ok: '完成', err: '失败' }[state] || '空闲';
+  }
+  function dockWrite(lines) {
+    var log = $('dockLog');
+    if (!lines || !lines.length) { return; }
+    var atBottom = (log.scrollHeight - log.scrollTop - log.clientHeight) < 40;
+    log.textContent += lines.join('\n') + '\n';
+    if (atBottom) { log.scrollTop = log.scrollHeight; }
+  }
+
+  function jobResult(j) {
+    var box = $('dockResult');
+    if (j.status === 'error') {
+      var needsToken = /令牌|token|401|403/i.test(j.error || '');
+      box.innerHTML = '<div class="res-actions">' +
+        (needsToken ? '<button class="btn sm" id="rGoSettings">去设置令牌</button>' : '') +
+        '<button class="btn sm" id="rGoLogs">看日志</button></div>';
+      var b = $('rGoSettings'); if (b) { b.onclick = function () { switchView('settings'); }; }
+      var g0 = $('rGoLogs'); if (g0) { g0.onclick = function () { switchView('logs'); }; }
+      return;
+    }
+    var r = j.result;
+    if (!r) { return; }
+    if (r.kind === 'sheets') {
+      box.innerHTML = '<table class="grid"><thead><tr><th>工作表</th><th>行</th><th>列</th><th></th></tr></thead><tbody>' +
+        (r.sheets || []).map(function (s) {
+          return '<tr><td>' + esc(s.name) + '</td><td>' + num(s.rows) + '</td><td>' + num(s.cols) +
+            '</td><td><button class="mini use-sheet" data-sheet="' + esc(s.name) + '">用它</button></td></tr>';
+        }).join('') + '</tbody></table>';
+      els('.use-sheet').forEach(function (b) {
+        b.onclick = function () {
+          $('sheet').value = b.dataset.sheet;
+          $('webhook').value = $('webhook').value;
+          switchView('data');
+          toast('已填表名：' + b.dataset.sheet, 'ok');
+        };
+      });
+      return;
+    }
+    if (r.kind === 'peek') {
+      var hr = r.header_rows || 0;
+      box.innerHTML = '<table class="grid"><tbody>' + (r.rows || []).map(function (cells, i) {
+        return '<tr class="' + (i < hr ? 'hdr' : '') + '">' + cells.map(function (c) {
+          var t = String(c == null ? '' : c);
+          return '<td title="' + esc(t) + '">' + esc(t.length > 40 ? t.slice(0, 40) + '…' : t) + '</td>';
+        }).join('') + '</tr>';
+      }).join('') + '</tbody></table>';
+      return;
+    }
+    if (r.kind === 'check') {
+      box.innerHTML = '<div class="res-grid">' +
+        '<div><b class="' + (r.ok_token ? 'big-state' : '') + '">' + (r.ok_token ? '✔ 令牌可用' : '✘ 令牌无效') + '</b><span>真连了一次 meta</span></div>' +
+        '<div><b>' + num(r.sheets) + '</b><span>读到的表</span></div>' +
+        '<div><b>' + num(r.token_len) + '</b><span>令牌长度</span></div></div>';
+      return;
+    }
+    // sync / offline
+    box.innerHTML =
+      '<div class="res-grid">' +
+        '<div><b>' + num(r.blocks) + '</b><span>分段</span></div>' +
+        '<div><b>' + num(r.hulls) + '</b><span>船</span></div>' +
+        '<div><b>' + esc((r.range && r.range.length) ? (r.range[0] + ' ~ ' + r.range[1]) : '—') + '</b><span>数据时段</span></div>' +
+        '<div><b>' + bytes(r.size) + '</b><span>data.js</span></div>' +
+      '</div>' +
+      '<div class="res-actions"><button class="btn sm" id="rOpenGantt">看横道图</button></div>';
+    var g = $('rOpenGantt');
+    if (g) { g.onclick = function () { switchView('gantt'); }; }
+  }
+
+  async function runJob(kind, args, title) {
+    if (S.job) { toast('已有任务在跑，等它结束', 'err'); return; }
+    var started;
+    try {
+      started = await api('POST', '/api/jobs', { kind: kind, args: args || {} });
+    } catch (err) { toast('启动失败：' + err.message, 'err'); return; }
+    watchJob(started.id, title || started.label || kind);
+  }
+
+  async function watchJob(id, title) {
+    S.job = { id: id, since: 0 };
+    dockOpen(title || '任务');
+    $('dockLog').textContent = '';
+    $('dockResult').innerHTML = '';
+    setPill('run', '运行中');
+    var t0 = Date.now();
+    var timer = setInterval(function () {
+      $('dockMeta').textContent = '已运行 ' + Math.round((Date.now() - t0) / 1000) + ' 秒';
+    }, 1000);
+
+    while (S.job && S.job.id === id) {
+      var j;
+      try { j = await api('GET', '/api/jobs/' + id + '?since=' + S.job.since); }
+      catch (err) {
+        clearInterval(timer); setPill('err', '失败');
+        dockWrite(['✘ 读取任务状态失败：' + err.message]); S.job = null; return;
+      }
+      if (j.lines && j.lines.length) { dockWrite(j.lines); S.job.since = j.total || (S.job.since + j.lines.length); }
+      if (!j.done) { await sleep(400); continue; }
+
+      clearInterval(timer); S.job = null;
+      $('dockTitle').textContent = j.label || title || '任务';
+      $('dockMeta').textContent = '用时 ' + Math.round((Date.now() - t0) / 1000) + ' 秒';
+      if (j.status === 'done') {
+        setPill('ok', '完成'); jobResult(j); toast('任务完成', 'ok');
+        if (j.kind === 'sync' || j.kind === 'offline' || j.kind === 'link') { refreshFrame(); loadState(true); }
+      } else {
+        setPill('err', '失败'); dockWrite(['✘ ' + (j.error || '任务失败')]); jobResult(j);
+        toast(j.error || '任务失败', 'err');
+      }
+      return;
+    }
+  }
+
+  /* ---------------- 定时任务 ---------------- */
+  async function refreshTasks() {
+    try {
+      var r = await api('GET', '/api/tasks');
+      var t = r.task;
+      S.state = S.state || {}; S.state.task = t;
+      var chip = $('taskChip');
+      if (!t.installed) { chip.textContent = '未安装'; chip.className = 'chip warn'; }
+      else { chip.textContent = t.label; chip.className = 'chip' + (t.state === 'ready' ? ' ok' : (t.state === 'disabled' ? ' warn' : '')); }
+      $('taskInfo').innerHTML =
+        '<dt>任务名</dt><dd class="mono">' + esc(t.name) + '</dd>' +
+        '<dt>状态</dt><dd><b class="big-state">' + esc(t.label) + '</b> <span class="muted">' + esc(t.status_raw || '') + '</span></dd>' +
+        '<dt>下次运行</dt><dd>' + esc(t.next || '—') + '</dd>' +
+        '<dt>上次运行</dt><dd>' + esc(t.last || '—') + ' <span class="muted">结果 ' + esc(t.result || '—') + '</span></dd>' +
+        '<dt>周期</dt><dd>' + esc(t.repeat || t.schedule || '—') + '</dd>' +
+        '<dt>命令</dt><dd class="mono">' + esc(t.command || '') + '</dd>';
+      $('stTask').textContent = t.installed ? t.label : '未安装';
+    } catch (err) {
+      $('taskChip').textContent = '读取失败'; $('taskChip').className = 'chip err';
+      toast('读取定时任务失败：' + err.message, 'err');
+    }
+  }
+
+  async function taskAction(action, extra) {
+    try {
+      var r = await api('POST', '/api/tasks', Object.assign({ action: action }, extra || {}));
+      S.state.task = r.task;
+      refreshTasks();
+      if (r.output && r.output.trim()) { toast('操作成功：' + r.output.split('\n')[0], 'ok'); }
+      else { toast('操作成功', 'ok'); }
+    } catch (err) { toast(err.message, 'err'); refreshTasks(); }
+  }
+
+  /* ---------------- 日志 ---------------- */
+  async function loadLog() {
+    try {
+      var r = await api('GET', '/api/log?name=' + encodeURIComponent(S.logName) + '&tail=600');
+      var body = $('logBody');
+      var atBottom = (body.scrollHeight - body.scrollTop - body.clientHeight) < 40;
+      if (r.missing) {
+        body.innerHTML = '<span style="color:#7f8fa8">还没有这个日志文件：' + esc(r.path) + '</span>';
+      } else {
+        body.textContent = r.lines.join('\n') || '（空）';
+        if (atBottom) { body.scrollTop = body.scrollHeight; }
+      }
+    } catch (err) { $('logBody').textContent = '读取日志失败：' + err.message; }
+  }
+  function startLogTimer() {
+    stopLogTimer();
+    S.logTimer = setInterval(function () {
+      if (S.view === 'logs' && $('logAuto').checked) { loadLog(); }
+    }, 2500);
+  }
+  function stopLogTimer() { if (S.logTimer) { clearInterval(S.logTimer); S.logTimer = null; } }
+
+  /* ---------------- 事件绑定 ---------------- */
+  $('btnRefresh').onclick = function () { refreshFrame(); toast('已刷新横道图'); };
+
+  // 「拉取并出图」拆分按钮：主按钮按当前方式出图，右侧下拉选方式（下载出图 / 令牌出图）
+  function quickSyncLabel(mode) { return mode === 'sync' ? '令牌出图' : '下载出图'; }
+  function setQuickMode(mode) {
+    S.quickMode = mode;
+    els('#quickSyncMenu .mi').forEach(function (m) { m.classList.toggle('on', m.dataset.mode === mode); });
+    $('quickSyncMenu').classList.remove('on');
+    $('btnQuickSync').title = '当前方式：' + quickSyncLabel(mode);
+  }
+  $('btnQuickSync').onclick = function () {
+    var st = S.state;
+    if (S.quickMode === 'link') {
+      // 下载出图：用「在线表链接」走 Edge 下载（空则用设置里的默认链接）
+      var url = currentLinkUrl();
+      if (!url) { switchView('data'); toast('先粘贴在线表链接', 'err'); return; }
+      runJob('link', { url: url, sheet: $('linkSheet').value.trim() }, '下载在线表并出图');
+      return;
+    }
+    // 令牌出图：用已保存的 webhook + AirScript 令牌
+    if (!st || !(st.cfg && st.cfg.webhook)) { switchView('settings'); toast('先填 webhook', 'err'); return; }
+    if (!st.token.effective) { switchView('settings'); toast('先设置 AirScript 令牌', 'err'); return; }
+    switchView('data');
+    runJob('sync', { webhook: st.cfg.webhook, sheet: st.cfg.sheet }, '拉取「' + (st.cfg.sheet || '第一张表') + '」并出图');
+  };
+  $('btnQuickSyncCaret').onclick = function (e) {
+    e.stopPropagation();
+    $('quickSyncMenu').classList.toggle('on');
+  };
+  els('#quickSyncMenu .mi').forEach(function (m) {
+    m.onclick = function (e) { e.stopPropagation(); setQuickMode(m.dataset.mode); };
+  });
+  document.addEventListener('click', function (e) {
+    var split = $('quickSyncSplit');
+    if (split && !split.contains(e.target)) { $('quickSyncMenu').classList.remove('on'); }
+  });
+  setQuickMode(S.quickMode);
+
+  ['webhook', 'sheet'].forEach(function (id) {
+    $(id).addEventListener('input', function () { S.hookDirty = true; });
+  });
+
+  $('btnRunSync').onclick = function () {
+    var hook = $('webhook').value.trim();
+    if (!hook) { toast('先粘贴 webhook', 'err'); return; }
+    runJob('sync', { webhook: hook, sheet: $('sheet').value.trim(), timeout: $('timeout').value },
+      '拉取「' + ($('sheet').value.trim() || '第一张表') + '」并出图');
+  };
+
+  $('btnSaveHook').onclick = async function () {
+    var hook = $('webhook').value.trim();
+    var sheet = $('sheet').value.trim();
+    if (!hook) { toast('webhook 不能为空', 'err'); return; }
+    try {
+      var r = await api('POST', '/api/webhook', { webhook: hook, sheet: sheet });
+      S.state = r.state; renderAll();
+      S.hookDirty = false;
+      toast('已保存 webhook 到 gantt_config.json', 'ok');
+    } catch (err) { toast('保存失败：' + err.message, 'err'); }
+  };
+
+  $('btnSheets').onclick = function () {
+    var hook = $('webhook').value.trim();
+    if (!hook) { toast('先填 webhook', 'err'); return; }
+    runJob('sheets', { webhook: hook, sheet: $('sheet').value.trim() }, '列出工作表');
+  };
+
+  $('btnPeek').onclick = function () {
+    var hook = $('webhook').value.trim();
+    if (!hook) { toast('先填 webhook', 'err'); return; }
+    runJob('peek', { webhook: hook, sheet: $('sheet').value.trim() }, '预览前几行');
+  };
+
+  $('btnRunLink').onclick = function () {
+    var url = currentLinkUrl();
+    if (!url) { toast('先粘贴在线表链接', 'err'); return; }
+    runJob('link', { url: url, sheet: $('linkSheet').value.trim() }, '下载在线表并出图');
+  };
+
+  $('btnOpenLink').onclick = async function () {
+    var url = currentLinkUrl();
+    if (!url) { toast('先粘贴在线表链接', 'err'); return; }
+    try {
+      var r = await api('POST', '/api/kdocs-open', { url: url });
+      toast(r.message || '已打开下载专用 Edge', 'ok');
+    } catch (err) { toast('打开失败：' + err.message, 'err'); }
+  };
+
+  $('excelSel').onchange = function () { if (this.value) { $('excelSrc').value = this.value; } };
+  $('btnRunOffline').onclick = function () {
+    var src = $('excelSrc').value.trim();
+    if (!src) { toast('先选 Excel 文件', 'err'); return; }
+    runJob('offline', { src: src, sheet: $('excelSheet').value.trim() }, '用本地 Excel 出图');
+  };
+  $('btnBrowse').onclick = async function () {
+    // 起始目录：当前已填文件的所在文件夹，否则第一个候选 Excel 的文件夹
+    var dir = '';
+    var cur = ($('excelSrc').value || '').trim();
+    if (cur) { dir = cur.replace(/[\\/][^\\/]*$/, ''); }
+    if (!dir && S.state && S.state.excel && S.state.excel.length) {
+      dir = String(S.state.excel[0].path).replace(/[\\/][^\\/]*$/, '');
+    }
+    if (S.native && window.pywebview && window.pywebview.api) {
+      try {
+        var p = await window.pywebview.api.pick_file(dir);
+        if (p) {
+          $('excelSrc').value = p;
+          S.excelFilled = false;
+          toast('已选择：' + p, 'ok');
+        }
+        return;                       // 取消选择就保持原样，不再弹 prompt
+      } catch (e) { /* 异常时退回下面的 prompt 兜底 */ }
+    }
+    var p2 = prompt('浏览器里没有系统文件选择器，请粘贴完整路径：', $('excelSrc').value || '');
+    if (p2) { $('excelSrc').value = p2; }
+  };
+
+  $('btnTaskInstall').onclick = function () { taskAction('install', { minutes: $('taskMinutes').value }); };
+  $('btnTaskRun').onclick = function () { taskAction('run'); };
+  $('btnTaskPause').onclick = function () { taskAction('pause'); };
+  $('btnTaskResume').onclick = function () { taskAction('resume'); };
+  $('btnTaskDelete').onclick = function () {
+    if (confirm('删除计划任务 Gantt_Sync？')) { taskAction('delete'); }
+  };
+
+  els('.tab').forEach(function (t) {
+    t.onclick = function () {
+      S.logName = t.dataset.log;
+      els('.tab').forEach(function (x) { x.classList.toggle('on', x === t); });
+      loadLog();
+    };
+  });
+  $('btnLogRefresh').onclick = function () { loadLog(); };
+  $('btnLogOpen').onclick = function () { reveal('base'); };
+  $('logAuto').onchange = function () { if (this.checked) { loadLog(); } };
+
+  $('resetOnRebuild').onchange = async function () {
+    try {
+      var r = await api('POST', '/api/edits-reset', { enabled: this.checked });
+      if (r.state) { S.state = r.state; }
+      renderAll();
+      toast(this.checked ? '已开启：出图时会自动清空存档' : '已关闭：出图时保留存档', 'ok');
+    } catch (err) {
+      this.checked = !this.checked;
+      toast('设置失败：' + err.message, 'err');
+    }
+  };
+
+  $('btnSaveToken').onclick = async function () {
+    var tok = $('tokInput').value.trim();
+    if (!tok) { toast('先把令牌粘贴进来', 'err'); return; }
+    try {
+      var r = await api('POST', '/api/token', { token: tok, persist: $('tokPersist').checked });
+      if (r.state) { S.state = r.state; }
+      renderAll();
+      $('tokInput').value = '';
+      if (r.error) { toast(r.error, 'err'); }
+      else { toast(r.persisted ? '令牌已保存（进程内 + 用户环境变量）' : '令牌已保存（本窗口内有效）', 'ok'); }
+    } catch (err) { toast('保存失败：' + err.message, 'err'); }
+  };
+
+  $('btnCheckToken').onclick = function () {
+    runJob('check', { webhook: $('webhook').value.trim(), sheet: $('sheet').value.trim() }, '检查令牌');
+  };
+
+  $('btnClearToken').onclick = async function () {
+    try {
+      var r = await api('POST', '/api/token', { token: '', persist: false });
+      if (r.state) { S.state = r.state; }
+      renderAll();
+      toast('已清除本窗口的令牌（用户环境变量里的还在）');
+    } catch (err) { toast('清除失败：' + err.message, 'err'); }
+  };
+
+  $('btnSaveLinkDef').onclick = async function () {
+    var link = $('linkDefInput').value.trim();
+    try {
+      var r = await api('POST', '/api/link-url', { link_url: link });
+      if (r.state) { S.state = r.state; }
+      renderAll();
+      if (!$('linkUrl').value) { $('linkUrl').value = link; }
+      toast(link ? '已保存默认下载链接' : '已清空默认下载链接', 'ok');
+    } catch (err) { toast('保存失败：' + err.message, 'err'); }
+  };
+
+  $('btnCopyPush').onclick = function () {
+    var url = (S.state && S.state.server && S.state.server.push_url) || '';
+    function doCopy() {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function () { toast('已复制推送地址'); },
+          function () { fallback(); });
+      } else { fallback(); }
+    }
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = url; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); toast('已复制推送地址'); } catch (e) { toast('复制失败，请手动复制'); }
+      ta.remove();
+    }
+    doCopy();
+  };
+
+  $('btnOpenBrowser').onclick = function () {
+    var url = ((S.state && S.state.server && S.state.server.url) || '').replace(/\/?$/, '/') + 'app';
+    if (S.native && window.pywebview && window.pywebview.api) { window.pywebview.api.open_external(url); }
+    else { window.open(url, '_blank', 'noopener'); }
+  };
+
+  els('[data-reveal]').forEach(function (b) {
+    b.onclick = function () { reveal(b.dataset.reveal); };
+  });
+
+  async function reveal(target) {
+    try { await api('POST', '/api/reveal', { target: target }); }
+    catch (err) { toast('打不开：' + err.message, 'err'); }
+  }
+
+  $('dockHide').onclick = function () { $('dock').classList.remove('open'); };
+  $('dockClear').onclick = function () {
+    $('dockLog').textContent = ''; $('dockResult').innerHTML = ''; setPill('', '空闲');
+  };
+
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest ? e.target.closest('[data-ext]') : null;
+    if (!a) { return; }
+    e.preventDefault();
+    var url = a.dataset.ext;
+    if (S.native && window.pywebview && window.pywebview.api) { window.pywebview.api.open_external(url); }
+    else { window.open(url, '_blank', 'noopener'); }
+  });
+
+  /* ---------------- 启动 ---------------- */
+  function markNative() { S.native = true; document.documentElement.classList.add('native'); }
+  window.addEventListener('pywebviewready', markNative);
+  if (window.pywebview && window.pywebview.api) { markNative(); }
+
+  (async function boot() {
+    await loadState();
+    var mView = /[?&]view=(gantt|data|tasks|logs|settings)/.exec(location.search);
+    switchView(mView ? mView[1] : 'gantt');
+    loadLog();
+    startLogTimer();
+    if (S.state && S.state.job) { watchJob(S.state.job, '进行中的任务'); }
+    setInterval(function () { loadState(true); }, 20000);
+  })();
+})();
+</script>
+</body>
+</html>

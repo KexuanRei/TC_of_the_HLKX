@@ -1,0 +1,2102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>分段生产横道图</title>
+<script>try{if(/[?&]embed=1/.test(location.search))document.documentElement.className+=' embed'}catch(e){}</script>
+<style>
+  :root{
+    --bg:#eef2f8; --panel:#fff; --line:#e9eef6; --line2:#dbe3f0;
+    --ink:#16202f; --ink2:#55627a; --ink3:#8b97ab;
+    --accent:#2f6feb; --today:#e5484d;
+    --left-w:460px; --head-h:56px; --row-h:34px;
+    --cols:152px 78px 50px 76px 56px 48px;
+    --pb:#ebaf4a; --tt:#2d9dc8; --jg:#67a67b; --sn:#48379c; --zx:#d43d22; --all:#5b6b85;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;overflow:hidden;display:flex;flex-direction:column;height:100vh;background:var(--bg);color:var(--ink);
+    font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  button,select,input{font:inherit;color:inherit}
+  .topbar{
+    flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:9px 16px;background:var(--panel);border-bottom:1px solid var(--line2);flex-wrap:wrap;
+  }
+  .brand{display:flex;align-items:baseline;gap:10px}
+  .brand h1{margin:0;font-size:15px;font-weight:700}
+  .brand span{font-size:11.5px;color:var(--ink3)}
+  .ctrl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  select,.btn,.inp{
+    border:1px solid var(--line2);background:#fff;border-radius:7px;height:28px;padding:0 9px;
+    font-size:12px;color:var(--ink2);cursor:pointer;
+  }
+  .inp{width:132px;cursor:text}
+  .btn:hover{border-color:#bfcfe8;color:var(--ink)}
+  .btn.danger{background:#e5484d;border-color:#e5484d;color:#fff}
+  .btn.danger:hover{border-color:#c9353a;color:#fff}
+  .seg{display:flex;background:#f1f4fa;border:1px solid var(--line2);border-radius:7px;padding:2px}
+  .seg button{border:0;background:transparent;padding:3px 10px;border-radius:5px;cursor:pointer;font-size:12px;color:var(--ink2)}
+  .seg button.on{background:#fff;color:var(--accent);font-weight:600;box-shadow:0 1px 3px rgba(22,32,47,.12)}
+
+  .stats{
+    flex:none;display:flex;gap:16px;align-items:center;padding:5px 16px;background:#f7f9fd;
+    border-bottom:1px solid var(--line2);font-size:11.5px;color:var(--ink3);flex-wrap:wrap;
+  }
+  .stats b{color:var(--ink2);font-weight:600;font-variant-numeric:tabular-nums}
+
+  .vp{flex:1;min-height:0;overflow:auto;position:relative;background:var(--panel)}
+  .vp::-webkit-scrollbar{width:11px;height:11px}
+  .vp::-webkit-scrollbar-thumb{background:#c9d4e6;border-radius:8px;border:3px solid #fff}
+  .content{position:relative}
+
+  .hrow{
+    position:sticky;top:0;z-index:20;display:flex;height:var(--head-h);
+    background:var(--panel);border-bottom:1px solid var(--line2);
+  }
+  .hleft{
+    position:sticky;left:0;z-index:21;flex:none;width:var(--left-w);
+    display:grid;grid-template-columns:var(--cols);
+    background:linear-gradient(#fafcff,#f4f8fe);box-shadow:inset -1px 0 0 var(--line2);
+  }
+  .hcell{display:flex;align-items:center;padding:0 8px;font-size:11px;font-weight:600;color:var(--ink3);border-right:1px solid var(--line)}
+  .hcell:last-child{border-right:0}
+  .hright{flex:1;overflow:hidden;position:relative}
+  .hmonths{display:flex;height:27px;border-bottom:1px solid var(--line)}
+  .hmonth{
+    flex:none;display:flex;align-items:center;padding-left:5px;font-size:10.5px;font-weight:700;color:var(--ink2);
+    border-right:1px solid var(--line2);white-space:nowrap;overflow:hidden;background:#fbfdff;
+  }
+  .hmonth.y{color:#33415c;font-weight:800;letter-spacing:.3px}
+  .hdays{display:flex;height:26px}
+  .hday{
+    flex:none;display:flex;align-items:center;justify-content:center;overflow:hidden;
+    font-size:9.5px;color:var(--ink3);border-right:1px solid rgba(22,32,47,.05);
+  }
+  .hday.wk{background:#f7f9fd}
+  .hday.is-today{background:#fdeced;color:var(--today);font-weight:700}
+
+  .bg{position:absolute;z-index:0;pointer-events:none}
+  .rows{position:relative;z-index:1;width:100%}
+  .row{
+    position:absolute;left:0;top:0;width:100%;height:var(--row-h);display:flex;
+    background:transparent;will-change:transform;cursor:default;
+  }
+  .row.ship .cells{cursor:pointer}
+  .cells{
+    position:sticky;left:0;z-index:2;flex:none;width:var(--left-w);
+    display:grid;grid-template-columns:var(--cols);
+    background:#fff;box-shadow:inset -1px 0 0 var(--line2);border-bottom:1px solid var(--line);
+  }
+  .row.alt .cells{background:#fbfdff}
+  .row.ship .cells{background:#eef3fb}
+  .cell{
+    display:flex;align-items:center;padding:0 8px;min-width:0;font-size:11.5px;color:var(--ink2);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-right:1px solid var(--line);
+    font-variant-numeric:tabular-nums;
+  }
+  .cell:last-child{border-right:0}
+  .c-seg{color:var(--ink);gap:5px}
+  .cell.na{color:#aab5c8}
+  .ship .c-seg{font-weight:700;font-size:12px}
+  .c-seg .txt{overflow:hidden;text-overflow:ellipsis}
+  .dot{width:5px;height:5px;border-radius:2px;flex:none;background:var(--c,#9fb0c9)}
+  .caret{width:9px;flex:none;font-size:9px;color:var(--ink3)}
+
+  .track{position:relative;flex:1;border-bottom:1px solid var(--line);cursor:crosshair}
+  .bar{
+    position:absolute;left:0;top:9px;height:16px;border-radius:4px;background:var(--c,#4d8bff);
+    display:flex;align-items:center;overflow:hidden;box-shadow:0 1px 2px rgba(22,32,47,.14);
+    cursor:grab;
+  }
+  .bar.dragging{cursor:grabbing!important}
+  body.drag-off .bar{cursor:default!important}
+  .bar .lbl{position:relative;padding:0 5px;font-size:10px;color:#fff;white-space:nowrap;overflow:hidden}
+  .bar.future{opacity:.42}
+  .bar.done{opacity:.85}
+  .bar.summary{top:12px;height:9px;border-radius:2px;background:var(--all);overflow:visible;opacity:1}
+  .bar.summary::before,.bar.summary::after{
+    content:"";position:absolute;top:100%;width:2px;height:4px;background:var(--all);opacity:.75;
+  }
+  .bar.summary::before{left:0}
+  .bar.summary::after{right:0}
+  /* 未填完工日期：右端画斜纹，表示"还在做" */
+  .bar.open::after{
+    content:"";position:absolute;right:0;top:0;bottom:0;width:5px;
+    background:repeating-linear-gradient(135deg,rgba(255,255,255,.9) 0 2px,transparent 2px 4px);
+  }
+
+  .empty{position:fixed;left:calc(var(--left-w) + 40px);right:40px;top:45%;transform:translateY(-50%);text-align:center;z-index:300;display:none;pointer-events:none}
+  .empty span{display:inline-block;background:rgba(255,255,255,.94);border:1px solid var(--line2);border-radius:10px;
+    padding:10px 20px;color:var(--ink3);font-size:13px;box-shadow:0 6px 20px rgba(22,32,47,.10)}  .today{position:absolute;top:0;z-index:3;width:18px;margin-left:-9px;
+    cursor:ew-resize;touch-action:none;user-select:none;outline:none}
+  .today::before{content:"";position:absolute;left:8px;top:0;bottom:0;border-left:2px dashed var(--today)}
+  .today:focus-visible::before,.today.dragging::before{border-left-style:solid}
+  .today:focus-visible .tag,.today.dragging .tag{box-shadow:0 0 0 3px rgba(229,72,77,.22)}
+  body.dragging-date,body.dragging-date *{cursor:ew-resize!important;user-select:none!important}
+  .today .tag{
+    position:absolute;top:0;left:9px;transform:translateX(-50%);font-style:normal;
+    background:var(--today);color:#fff;font-size:9.5px;font-weight:600;padding:0 5px;border-radius:8px;white-space:nowrap;
+  }
+  .tip{
+    position:fixed;z-index:9999;pointer-events:none;max-width:300px;background:rgba(20,29,43,.96);
+    color:#e9eef8;border-radius:8px;padding:8px 10px;font-size:11.5px;line-height:1.55;
+    box-shadow:0 8px 24px rgba(10,16,26,.3);opacity:0;transition:opacity .12s;
+  }
+  .tip.show{opacity:1}
+  .tip h4{margin:0 0 4px;font-size:12px;color:#fff}
+  .tip .r{display:flex;justify-content:space-between;gap:14px;color:#b9c5d8}
+  .tip .r b{color:#fff;font-weight:600}
+  .tip i.open{font-style:normal;color:#ffd479}
+  .tip b.na{color:#8b97ab;font-weight:400}
+
+  .footer{
+    flex:none;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+    padding:5px 16px;border-top:1px solid var(--line2);background:#f7f9fd;font-size:11.5px;color:var(--ink3);
+  }
+  .lg{display:inline-flex;align-items:center;gap:5px}
+  .lg i{width:14px;height:8px;border-radius:2px;display:inline-block}
+
+  /* 嵌在窗口界面（app.html）里时：?embed=1 → 收起重复的标题行，省一点高度 */
+  .embed .brand{display:none}
+  .embed .topbar{padding:6px 12px;justify-content:flex-end}
+  .embed .stats{padding:3px 12px;gap:13px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <h1>分段生产横道图</h1>
+    <span id="src">数据更新中_在建.xlsx · Sheet1</span>
+  </div>
+  <div class="ctrl">
+    <select id="phase" title="显示哪个阶段">
+      <option value="tt">在胎（上胎→下胎）</option>
+      <option value="pb">拼板（开工→完工）</option>
+      <option value="jg">结构（下胎→结构完工）</option>
+      <option value="sn">舾装（开工→销项）</option>
+      <option value="zx">转序（成品化→转序）</option>
+      <option value="all">全流程（总跨度）</option>
+      <option value="multi">全部阶段（同时显示）</option>
+    </select>
+    <input class="inp" id="q" placeholder="筛选分段号 / 船号" />
+    <div class="seg" id="zoom">
+      <button data-s="month" class="on">月</button>
+      <button data-s="week">周</button>
+      <button data-s="day">日</button>
+    </div>
+    <div class="seg" id="group" title="分组主键">
+      <button data-g="hull">按船</button>
+      <button data-g="shop" class="on">按车间</button>
+    </div>
+    <button class="btn" id="backBtn" style="display:none">← 全部船</button>
+    <button class="btn" id="todayBtn">定位今天</button>
+    <button class="btn" id="dragToggle" title="切换是否允许拖动进度条">禁用拖动</button>
+    <button class="btn" id="exportBtn" title="把当前横道图导出为 Excel（样式一致）">导出 Excel</button>
+    <button class="btn" id="resetBtn" title="清除所有已保存的进度条改动，恢复为原始数据">恢复原始</button>
+  </div>
+</div>
+
+<div class="stats">
+  <span>船 <b id="s-ship">-</b> 艘</span>
+  <span>分段 <b id="s-block">-</b></span>
+  <span>当前行 <b id="s-rows">-</b></span>
+  <span>渲染 DOM <b id="s-dom">-</b></span>
+  <span>数据时段 <b id="s-range">-</b></span>
+  <span id="s-gen"></span>
+  <span>参考日期 <b id="s-marker">-</b>（拖动红线或点击时间轴调整）</span>
+  <span title="相对于月视图；点击月/周/日可恢复预设">缩放 <b id="s-zoom">100%</b></span>
+</div>
+
+<div class="vp" id="vp">
+  <div class="content" id="content">
+    <div class="hrow">
+      <div class="hleft">
+        <div class="hcell" id="hc0">分段 / 船</div>
+        <div class="hcell" id="hc1">类型</div>
+        <div class="hcell" id="hc2">吨位</div>
+        <div class="hcell" id="hc3">车间</div>
+        <div class="hcell" id="hc4">开始</div>
+        <div class="hcell" id="hc5">工期</div>
+      </div>
+      <div class="hright" id="hright">
+        <div class="hmonths" id="hmonths"></div>
+        <div class="hdays" id="hdays"></div>
+      </div>
+    </div>
+    <div class="bg" id="bg"></div>
+    <div class="rows" id="rows">
+      <div class="today" id="todayLine" role="slider" tabindex="0" aria-label="日期参考线" aria-orientation="horizontal"
+        title="左右拖动选择日期；方向键微调；双击回到今天"><i class="tag">今天</i></div>
+    </div>
+  </div>
+</div>
+
+<div class="empty" id="empty"><span>还没有具体时间 / 工期</span></div>
+<div class="footer">
+  <span class="lg"><i style="background:var(--pb)"></i>拼板</span>
+  <span class="lg"><i style="background:var(--tt)"></i>在胎</span>
+  <span class="lg"><i style="background:var(--jg)"></i>结构</span>
+  <span class="lg"><i style="background:var(--sn)"></i>舾装</span>
+  <span class="lg"><i style="background:var(--zx)"></i>转序</span>
+  <span class="lg"><i style="background:var(--all);opacity:.8"></i>船汇总</span>
+  <span>拖动进度条改日期（条身=移动；按住 Ctrl 后不能移动，按住 Ctrl 拖动条左右两端=任意伸缩，改动自动写回 data.js） · 点击时间轴移动红线（按住 Ctrl 时红线锁定） · 点击分组名钻取 · Ctrl＋滚轮围绕红线缩放（向上放大，向下缩小）</span>
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script src="data.js"></script>
+<script src="edits.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  /* ---------------- 常量 ---------------- */
+  var ROW_H = 34, LEFT_W = 460, BUFFER = 6;
+  // multi 模式：一行里上下叠放 5 条进度条（每阶段一条、颜色不同），行高随之加高
+  var MULTI_H = 90, MULTI_LANE = 18, MULTI_BAR_H = 14, MULTI_TOP = 2;
+  var SCALES = { month: 1.7, week: 6, day: 11 };
+  var PHASES = {
+    pb:  { name: '拼板', s: 6,  e: 7,  color: '#ebaf4a' },
+    tt:  { name: '在胎', s: 8,  e: 9,  color: '#2d9dc8' },
+    jg:  { name: '结构', s: 10, e: 11, color: '#67a67b' },
+    sn:  { name: '舾装', s: 12, e: 13, color: '#48379c' },
+    zx:  { name: '转序', s: 14, e: 15, color: '#d43d22' },
+    all: { name: '全流程', s: -1, e: -1, color: '#5b6b85' }
+  };
+  var WEEK = ['日', '一', '二', '三', '四', '五', '六'];
+  var MULTI = ['pb', 'tt', 'jg', 'sn', 'zx'];
+
+  function rowH() { return phaseKey === 'multi' ? MULTI_H : ROW_H; }
+  // 排序 / 时间轴 / 汇总用到的「代表阶段」：multi 用全流程跨度
+  function effKey() { return phaseKey === 'multi' ? 'all' : phaseKey; }
+  // 把一条进度条放到指定泳道（top / height 内联，覆盖 CSS 默认值）
+  function placeBar(bar, top, height) {
+    bar.style.top = top + 'px';
+    bar.style.height = height + 'px';
+  }
+
+  var D = window.GANTT;
+  if (!D) {
+    document.body.innerHTML = '<p style="padding:30px;font:14px sans-serif">' +
+      '没有找到 data.js，请先运行 build.py 生成数据。</p>';
+    return;
+  }
+
+  /* ---------------- DOM ---------------- */
+  var $ = function (id) { return document.getElementById(id); };
+  var vp = $('vp'), content = $('content'), rowsEl = $('rows'), bg = $('bg');
+  var hmonths = $('hmonths'), hdays = $('hdays'), hright = $('hright'), todayEl = $('todayLine');
+  var tipEl = $('tip');
+
+  /* ---------------- 时间 ---------------- */
+  var today = D.today;
+  // 独立的参考日期：不改变数据快照中的 today，也不影响工期和导出。
+  var markerDay = today;
+  var markerDrag = null, markerFrame = null;
+  var dayMs = 86400000;
+  // data.js 里的日期是「相对 2020-01-01 的天数」，Date 的 0 点是 1970-01-01，差 18262 天
+  var EPOCH_DAYS = 18262;
+  function dateOf(day) { return new Date((day + EPOCH_DAYS) * dayMs); }
+  function dayOf(y, m, d) { return Math.round(Date.UTC(y, m, d) / dayMs) - EPOCH_DAYS; }
+  function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+  function fmtMD(day) {
+    var d = dateOf(day);
+    return (d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
+  }
+  function fmtFull(day) {
+    var d = dateOf(day);
+    return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
+  }
+  function weekdayOf(day) { return dateOf(day).getUTCDay(); }
+
+  /* ---------------- 数据预处理 ---------------- */
+  var hulls = D.hulls;          // [ [name, model, minDay, maxDay, count] ]
+  var blocks = D.blocks;        // [ hull, seg, type, ton, area, shop, pbA..zxB ]
+  var types = D.types, areas = D.areas, shops = D.shops;
+
+  // —— 进度条改动：拖进度条改的日期，写回服务端 data.js（成为真数据） ——
+  // 键 = 分段在 data.js 里的索引（该数据集「分段号」列为空，只能用索引唯一定位）
+  var edits = {};               // { 分段索引: [10 个日期列(6..15)] }
+  (function () {
+    try {
+      var g = window.GANTT_EDITS;
+      if (g && g.v === 2 && g.e) edits = g.e;
+    } catch (_) { edits = {}; }
+    for (var i = 0; i < blocks.length; i++) {
+      var ov = edits[i];
+      if (!ov || !ov.length) continue;
+      var b = blocks[i];
+      for (var k = 0; k < 10; k++) if (ov[k]) b[6 + k] = ov[k];
+    }
+  })();
+
+  var minDay = Infinity, maxDay = -Infinity;
+  for (var i = 0; i < blocks.length; i++) {
+    var b = blocks[i];
+    for (var k = 6; k < 16; k += 2) {
+      if (b[k]) {
+        if (b[k] < minDay) minDay = b[k];
+        if (b[k + 1] && b[k + 1] > maxDay) maxDay = b[k + 1];
+      }
+    }
+  }
+  var gMin = minDay, gMax = maxDay;
+  var viewStart = minDay - 12;
+  var totalDays = maxDay + 22 - viewStart;
+
+  // 时间轴跟随当前可见内容：全部船 = 全时段；展开某艘 = 只铺这艘的周期
+  function computeRange() {
+    var lo = Infinity, hi = -Infinity, any = false;
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (r.k === 's') {
+        var sp = groupSpans[r.i];
+        if (sp) { any = true; if (sp[0] < lo) lo = sp[0]; if (sp[1] > hi) hi = sp[1]; }
+      } else if (r.k === 'b') {
+        var bb = barOf(blocks[r.i], effKey());
+        if (bb) { any = true; if (bb[0] < lo) lo = bb[0]; if (bb[1] > hi) hi = bb[1]; }
+      }
+    }
+    if (!any) { lo = gMin; hi = gMax; }
+    hasData = any;
+
+    // 总览：右侧固定多铺 3 个月（数据到 11 月 → 轴到次年 2 月底）
+    var searching = ($('q').value || '').trim().length > 0;
+    if (focus < 0 && !searching) {
+      var dd = dateOf(hi);
+      // 第 0 天 = 上个月最后一天；+4 个月的第 0 天 = 三个月后的月末
+      var plus3End = dayOf(dd.getUTCFullYear(), dd.getUTCMonth() + 4, 0);
+      if (plus3End > hi) hi = plus3End;
+    }
+
+    var padL = focus >= 0 ? 2 : Math.max(6, Math.round((hi - lo) * 0.03));
+    var padR = Math.max(6, Math.round((hi - lo) * 0.02));
+    viewStart = lo - padL;
+    totalDays = (hi + padR) - viewStart + 1;
+  }
+
+  // 按船分组；末尾追加一个「暂无工期」合成组（HULL_NA，不含任何分段）
+  var HULL_NA = hulls.length;
+  var byHull = [];
+  for (var h = 0; h < hulls.length; h++) byHull.push([]);
+  byHull.push([]);                       // HULL_NA：空的兜底组
+  for (var bi = 0; bi < blocks.length; bi++) {
+    byHull[blocks[bi][0]].push(bi);
+  }
+  var hullOrder = [];
+  for (var h2 = 0; h2 < hulls.length; h2++) {
+    if (byHull[h2].length > 0) hullOrder.push(h2);
+  }
+  hullOrder.sort(function (a, c) {
+    var da = hulls[a][2] || Infinity, dc = hulls[c][2] || Infinity;
+    return da - dc;
+  });
+  hullOrder.push(HULL_NA);               // 「暂无工期」永远排在最后
+
+  // 按车间分组：shop 索引 -1（没填车间）单独归到最后一组「未指定车间」
+  var SHOP_NA = shops.length;
+  var byShop = [];
+  for (var s0 = 0; s0 <= SHOP_NA; s0++) byShop.push([]);
+  for (var bi2 = 0; bi2 < blocks.length; bi2++) {
+    var si = blocks[bi2][5];
+    byShop[(si >= 0 && si < shops.length) ? si : SHOP_NA].push(bi2);
+  }
+  function shopName(i) { return i < shops.length ? shops[i] : '暂无车间'; }
+  var shopDescs = [];
+  for (var s1 = 0; s1 < byShop.length; s1++) {
+    var slist = byShop[s1], slo = 0, shi = 0;
+    for (var i1 = 0; i1 < slist.length; i1++) {
+      var sb = blocks[slist[i1]];
+      for (var k1 = 6; k1 < 16; k1++) {
+        if (sb[k1]) { if (!slo || sb[k1] < slo) slo = sb[k1]; if (sb[k1] > shi) shi = sb[k1]; }
+      }
+    }
+    shopDescs.push([shopName(s1), '', slo, shi, slist.length]);
+  }
+  var shopOrder = [];
+  for (var s2 = 0; s2 < shopDescs.length; s2++) shopOrder.push(s2);
+  shopOrder.sort(function (a, c) {
+    if (a === SHOP_NA) return 1;
+    if (c === SHOP_NA) return -1;
+    var da = shopDescs[a][2] || Infinity, dc = shopDescs[c][2] || Infinity;
+    return da - dc;
+  });
+
+  // 没有任何分段（无工期）的船：按车间/按船总览时都归入末尾的「暂无」组
+  var noDataHulls = [];
+  for (var h3 = 0; h3 < hulls.length; h3++) {
+    if (byHull[h3].length === 0) noDataHulls.push(h3);
+  }
+
+  // 统一的分组访问器：groupMode 决定当前用船还是用车间
+  function groupList() { return groupMode === 'shop' ? byShop : byHull; }
+  function groupMeta(i) {
+    if (groupMode === 'shop') return shopDescs[i];
+    if (i === HULL_NA) return ['暂无工期', '', 0, 0, noDataHulls.length];
+    return hulls[i];
+  }
+  function groupOrder() { return groupMode === 'shop' ? shopOrder : hullOrder; }
+
+  // 末尾的「暂无车间 / 暂无工期」兜底组
+  function isNoDataGroup(gi) {
+    return (groupMode === 'shop' && gi === SHOP_NA) || (groupMode === 'hull' && gi === HULL_NA);
+  }
+
+  /* ---------------- 状态 ---------------- */
+  var px = SCALES.month, scaleKey = 'month';
+  var customPx = null, zoomFrame = null, wheelZoom = 0;
+  var MAX_DAY_PX = 64;
+  var phaseKey = 'tt';
+  var groupMode = 'shop'; // 'hull' = 按船分组；'shop' = 按车间分组（默认按车间）
+  var focus = -1;        // -1 = 总览；>=0 = 只看这一组（船或车间）
+  var noDataCollapsed = true;  // 「暂无车间 / 暂无工期」折叠状态：默认折叠（隐藏无工期船）
+  var hasData = true;    // 当前视图有没有任何可画的数据
+  var rows = [];
+  var pool = [];
+
+  /* ---------------- 行数据 ---------------- */
+  function isDone(b) { return !!(b[14] || b[15]); }   // 有转序（成品化/转序日期）= 该分段已完工
+
+  // （multi 不再把每个分段展开成 5 行，而是把 5 条进度条叠在同一行里）
+
+  // strict=true 时不做"画到今天"的延伸（用于船的汇总条：只按真实完工日收口）
+  function barOf(b, key, strict) {
+    var done = isDone(b);
+    if (key === 'all') {
+      var lo = 0, hi = 0, openAll = false;
+      for (var k = 6; k < 16; k += 2) {
+        if (b[k]) { if (!lo || b[k] < lo) lo = b[k]; }
+        if (b[k + 1]) { if (b[k + 1] > hi) hi = b[k + 1]; }
+      }
+      if (!lo && !hi) return null;
+      if (!lo) lo = hi;
+      if (!hi) {
+        if (!done && !strict && lo <= today) { hi = today; openAll = true; }
+        else hi = lo;
+      }
+      return [lo, hi, openAll];
+    }
+    var ph = PHASES[key];
+    var s = b[ph.s], e = b[ph.e];
+    // 都有 / 只有终点 / 只有起点 / 起止颠倒
+    if (!s && !e) return null;
+    var open = false;
+    if (!s) s = e;
+    if (!e) {
+      // 已完工 → 工期截止在转序日期（build 已按 BW 列补齐）；没完工才画到今天
+      if (done) e = Math.max(s, b[15] || s);
+      else if (!strict && s <= today) { e = today; open = true; }
+      else e = s;
+    }
+    if (e < s) { var t = s; s = e; e = t; }
+    return [s, e, open];
+  }
+
+  function groupSpan(list, key) {
+    var lo = 0, hi2 = 0;
+    for (var i = 0; i < list.length; i++) {
+      var r = barOf(blocks[list[i]], key, true);
+      if (!r) continue;
+      if (!lo || r[0] < lo) lo = r[0];
+      if (r[1] > hi2) hi2 = r[1];
+    }
+    return lo ? [lo, hi2] : null;
+  }
+  var spanCache = {};
+  function spansFor(key, mode) {
+    // multi 模式没有自己的跨度：汇总条用全流程跨度
+    if (key === 'multi') key = 'all';
+    var m = mode || groupMode;
+    var ck = m + '|' + key;
+    if (spanCache[ck]) return spanCache[ck];
+    var list = m === 'shop' ? byShop : byHull;
+    var n = list.length;
+    var arr = [];
+    for (var i = 0; i < n; i++) arr.push(groupSpan(list[i], key));
+    spanCache[ck] = arr;
+    return arr;
+  }
+
+  // 当前「分组 × 阶段」的汇总跨度（随分组/阶段切换重算）
+  var groupSpans = null;
+  function refreshGroupSpans() {
+    groupSpans = spansFor(effKey(), groupMode);
+    groupPhaseSpansCache = null;
+  }
+
+  // multi 模式下每组逐阶段跨度（惰性算一次并缓存）
+  var groupPhaseSpansCache = null;
+  function groupPhaseSpans() {
+    if (groupPhaseSpansCache) return groupPhaseSpansCache;
+    var list = groupMode === 'shop' ? byShop : byHull;
+    var n = list.length;
+    var arr = new Array(n);
+    for (var gi = 0; gi < n; gi++) {
+      var row = new Array(MULTI.length);
+      for (var p = 0; p < MULTI.length; p++) row[p] = groupSpan(list[gi], MULTI[p]);
+      arr[gi] = row;
+    }
+    groupPhaseSpansCache = arr;
+    return arr;
+  }
+
+  // 组内按「当前阶段开始日」排序，画出来是阶梯状，不会各行乱堆
+  var sortedCache = {};
+  function sortedBlocksOf(key, mode) {
+    var m = mode || groupMode;
+    var ck = m + '|' + key;
+    if (sortedCache[ck]) return sortedCache[ck];
+    var list = m === 'shop' ? byShop : byHull;
+    var n = list.length;
+    var arr = new Array(n);
+    for (var i = 0; i < n; i++) {
+      arr[i] = list[i].slice().sort(function (a, b) {
+        var A = barOf(blocks[a], key), B = barOf(blocks[b], key);
+        var as = A ? A[0] : 1e9, bs = B ? B[0] : 1e9;
+        if (as !== bs) return as - bs;
+        return String(blocks[a][1] || '').localeCompare(String(blocks[b][1] || ''));
+      });
+    }
+    sortedCache[ck] = arr;
+    return arr;
+  }
+
+  function rebuildRows() {
+    rows = [];
+    var q = ($('q').value || '').trim().toLowerCase();
+
+    if (q) {
+      var picked = [];
+      for (var i = 0; i < blocks.length; i++) {
+        var b = blocks[i];
+        var seg = String(b[1] || '').toLowerCase();
+        var hull = hulls[b[0]][0].toLowerCase();
+        var shop = shops[b[5]] ? shops[b[5]].toLowerCase() : '';
+        if (seg.indexOf(q) >= 0 || hull.indexOf(q) >= 0 || shop.indexOf(q) >= 0) picked.push(i);
+      }
+      picked.sort(function (a, c) {
+        var A = barOf(blocks[a], effKey()),
+            B = barOf(blocks[c], effKey());
+        return (A ? A[0] : 1e9) - (B ? B[0] : 1e9);
+      });
+      for (var k = 0; k < picked.length; k++) rows.push({ k: 'b', i: picked[k] });
+      return;
+    }
+
+    if (focus >= 0) {
+      var list = sortedBlocksOf(effKey(), groupMode)[focus];
+      for (var m = 0; m < list.length; m++) rows.push({ k: 'b', i: list[m] });
+      return;
+    }
+
+    var order = groupOrder();
+    for (var j = 0; j < order.length; j++) rows.push({ k: 's', i: order[j] });
+    // 「暂无车间 / 暂无工期」展开时，把无工期的船附在末尾
+    if (!noDataCollapsed) {
+      for (var h3 = 0; h3 < noDataHulls.length; h3++) rows.push({ k: 'n', i: noDataHulls[h3] });
+    }
+  }
+
+  /* ---------------- 布局 ---------------- */
+  function showDayHeader() { return px >= 9 && (customPx !== null || scaleKey === 'day'); }
+  function headH() { return showDayHeader() ? 54 : 28; }
+
+  function buildHeader() {
+    var w = totalDays * px;
+    hmonths.textContent = '';
+    hdays.textContent = '';
+
+    // 用"平均月宽"统一决定密度，避免 2 月 33px、3 月 35px 造成有的月有字有的没字
+    var avgMonth = 30.4 * px;
+    var everyMonth = avgMonth >= 30;
+    var quarterOnly = avgMonth >= 24;
+
+    var fragM = document.createDocumentFragment();
+    var i = 0;
+    while (i < totalDays) {
+      var day = viewStart + i;
+      var d = dateOf(day);
+      var nextM = dayOf(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
+      var len = Math.min(totalDays - i, nextM - day);
+      if (len < 1) len = 1;
+      var m = document.createElement('div');
+      m.className = 'hmonth';
+      m.style.width = (len * px) + 'px';
+      var mon = d.getUTCMonth() + 1;
+      var wMonth = len * px;
+      // 首尾残缺月份「像素宽度」太窄才留空，避免出现被切一半的 "7"
+      var partial = (i === 0 || i + len >= totalDays) && wMonth < 26;
+      if (partial) {
+        /* 留空 */
+      } else if (mon === 1) {
+        m.textContent = String(d.getUTCFullYear()).slice(2) + '年';
+        m.className += ' y';
+      } else if (everyMonth) {
+        m.textContent = mon + '月';
+      } else if (quarterOnly && mon % 3 === 1) {
+        m.textContent = mon + '月';
+      }
+      fragM.appendChild(m);
+      i += len;
+    }
+    hmonths.appendChild(fragM);
+
+    // 连续放大后自动展示日号；密度足够时再显示星期。
+    if (showDayHeader()) {
+      var fragD = document.createDocumentFragment();
+      for (var k = 0; k < totalDays; k++) {
+        var dd = viewStart + k;
+        var cell = document.createElement('div');
+        cell.className = 'hday' + (weekdayOf(dd) === 0 || weekdayOf(dd) === 6 ? ' wk' : '');
+        if (dd === today) cell.className += ' is-today';
+        cell.style.width = px + 'px';
+        cell.textContent = dateOf(dd).getUTCDate() + (px >= 44 ? ' 周' + WEEK[weekdayOf(dd)] : '');
+        cell.title = fmtFull(dd) + ' 星期' + WEEK[weekdayOf(dd)];
+        fragD.appendChild(cell);
+      }
+      hdays.appendChild(fragD);
+      hdays.style.width = w + 'px';
+    }
+    hmonths.style.width = w + 'px';
+    hright.style.height = (headH() - 1) + 'px';
+  }
+
+  function layout(keepRange) {
+    if (!keepRange) computeRange();
+    if (customPx !== null) customPx = Math.max(fitScale(), Math.min(MAX_DAY_PX, customPx));
+    px = customPx === null ? scalePx(scaleKey) : customPx;
+    setScaleButtons(customPx === null ? scaleKey : '');
+    $('s-zoom').textContent = Math.round(px / fitScale() * 100) + '%';
+
+    var em = $('empty');
+    if (hasData) {
+      em.style.display = 'none';
+    } else {
+      em.style.display = 'block';
+      em.firstElementChild.textContent = focus >= 0
+        ? groupMeta(focus)[0] + '：还没有具体时间 / 工期'
+        : '当前视图没有具体时间 / 工期';
+    }
+    var bodyH = rows.length * rowH();
+    var trackW = totalDays * px;
+    document.documentElement.style.setProperty('--head-h', headH() + 'px');
+    document.documentElement.style.setProperty('--row-h', rowH() + 'px');
+    content.style.width = (LEFT_W + trackW) + 'px';
+    content.style.height = (headH() + bodyH) + 'px';
+    rowsEl.style.height = bodyH + 'px';
+
+    bg.style.left = LEFT_W + 'px';
+    bg.style.top = headH() + 'px';
+    bg.style.width = trackW + 'px';
+    bg.style.height = bodyH + 'px';
+
+    var sinceMon = (weekdayOf(viewStart) + 6) % 7;
+    bg.style.backgroundImage = 'repeating-linear-gradient(to right,' +
+      'rgba(255,255,255,0) 0px,rgba(255,255,255,0) ' + (5 * px) + 'px,' +
+      'rgba(120,140,175,.13) ' + (5 * px) + 'px,rgba(120,140,175,.13) ' + (7 * px) + 'px)';
+    if (showDayHeader()) {
+      bg.style.backgroundImage = 'repeating-linear-gradient(to right,transparent 0px,transparent ' +
+        (px - 1) + 'px,rgba(120,140,175,.16) ' + (px - 1) + 'px,rgba(120,140,175,.16) ' + px + 'px),' + bg.style.backgroundImage;
+    }
+    bg.style.backgroundPosition = (-sinceMon * px) + 'px 0';
+
+    buildHeader();
+
+    updateMarker();
+
+    $('s-rows').textContent = rows.length.toLocaleString();
+    invalidate();
+  }
+
+  /* ---------------- 渲染 ---------------- */
+  function makeSlot() {
+    var el = document.createElement('div');
+    el.className = 'row';
+    var cells = document.createElement('div');
+    cells.className = 'cells';
+
+    function cell(cls) {
+      var c = document.createElement('div');
+      c.className = 'cell ' + cls;
+      return c;
+    }
+
+    var cSeg = cell('c-seg');
+    var caret = document.createElement('i'); caret.className = 'caret';
+    var dot = document.createElement('i'); dot.className = 'dot';
+    var txt = document.createElement('span'); txt.className = 'txt';
+    cSeg.appendChild(caret); cSeg.appendChild(dot); cSeg.appendChild(txt);
+
+    var cType = cell('c-type');
+    var cTon = cell('c-ton');
+    var cShop = cell('c-shop');
+    var cStart = cell('c-start');
+    var cDur = cell('c-dur');
+
+    cells.appendChild(cSeg); cells.appendChild(cType); cells.appendChild(cTon);
+    cells.appendChild(cShop); cells.appendChild(cStart); cells.appendChild(cDur);
+
+    var track = document.createElement('div');
+    track.className = 'track';
+
+    var slot = { el: el, idx: -1, txt: txt, caret: caret, dot: dot,
+                 type: cType, ton: cTon, shop: cShop, start: cStart, dur: cDur,
+                 bars: [], lbls: [] };
+
+    // 每个槽位固定放 5 条进度条（对应 5 个阶段）；单阶段只显示第 0 条，
+    // multi 模式则把 5 条按泳道上下叠放在同一行里。
+    for (var p = 0; p < MULTI.length; p++) {
+      var bar = document.createElement('div');
+      bar.className = 'bar';
+      var lbl = document.createElement('span');
+      lbl.className = 'lbl';
+      bar.appendChild(lbl);
+      track.appendChild(bar);
+      slot.bars.push(bar);
+      slot.lbls.push(lbl);
+      (function (bp, bEl) {
+        bEl._slot = slot; bEl._p = bp;   // 供红线按住 Ctrl 时把事件转给被压住的进度条
+        bEl.addEventListener('pointerdown', function (e) { onBarPointerDown(e, slot, bp); });
+        bEl.addEventListener('pointermove', onBarPointerMove);
+        bEl.addEventListener('pointerleave', onBarPointerLeave);
+        bEl.addEventListener('pointerup', onBarPointerUp);
+        bEl.addEventListener('pointercancel', onBarPointerUp);
+        bEl.addEventListener('lostpointercapture', onBarPointerUp);
+        bEl.addEventListener('click', function (e) { e.stopPropagation(); });
+      })(p, bar);
+    }
+
+    el.appendChild(cells);
+    el.appendChild(track);
+
+    // 只点击左侧冻结列（船号/车间名…）才钻取这一组；时间轴区域留给「移动红线」。
+    cells.addEventListener('click', function () {
+      var r = rows[el._rowIndex];
+      if (!r || r.k !== 's') return;
+      if (groupMode === 'hull' && r.i === HULL_NA) { toggleNoData(); return; }
+      enterGroup(r.i);
+    });
+
+    // 「暂无车间 / 暂无工期」的箭头点击 = 折叠/展开；点名称仍可钻取该组的无车间分段
+    caret.addEventListener('click', function (e) {
+      var r = rows[el._rowIndex];
+      if (!r || r.k !== 's' || !isNoDataGroup(r.i)) return;
+      e.stopPropagation();
+      toggleNoData();
+    });
+
+    return slot;
+  }
+
+  function setScaleButtons(key) {
+    var btns = $('zoom').querySelectorAll('button');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle('on', btns[i].getAttribute('data-s') === key);
+    }
+  }
+
+  function enterGroup(gi) {
+    focus = gi;
+    $('backBtn').style.display = '';
+    $('backBtn').textContent = groupMode === 'shop' ? '← 全部车间' : '← 全部船';
+    // 钻进一组默认用「日」视图，条能铺开；想要总览点「月」
+    if (scaleKey === 'month') {
+      scaleKey = 'day';
+      px = SCALES.day;
+      setScaleButtons('day');
+    }
+    rebuildRows();
+    layout();
+    vp.scrollTop = 0;
+    vp.scrollLeft = 0;
+  }
+
+  function leaveGroup() {
+    focus = -1;
+    $('backBtn').style.display = 'none';
+    rebuildRows();
+    layout();
+    vp.scrollTop = 0;
+    vp.scrollLeft = 0;
+  }
+
+  // 「暂无车间 / 暂无工期」折叠/展开（只影响末尾的无工期船列表）
+  function toggleNoData() {
+    noDataCollapsed = !noDataCollapsed;
+    rebuildRows();
+    layout();
+  }
+
+  // 当前分组的 6 列表头文案（按船 / 按车间两套）
+  function columnLabels() {
+    if (groupMode === 'shop') return ['车间 / 分段', '船号', '吨位', '类型', '开始', '工期'];
+    return ['分段 / 船', '类型', '吨位', '车间', '开始', '工期'];
+  }
+  function updateHeaders() {
+    var lbl = columnLabels();
+    for (var i = 0; i < 6; i++) {
+      var h = $('hc' + i);
+      if (h) h.textContent = lbl[i];
+    }
+  }
+  function setGroupMode(m) {
+    if ((m !== 'hull' && m !== 'shop') || m === groupMode) return;
+    groupMode = m;
+    focus = -1;
+    $('backBtn').style.display = 'none';
+    var btns = $('group').querySelectorAll('button');
+    for (var i = 0; i < btns.length; i++) btns[i].classList.toggle('on', btns[i].getAttribute('data-g') === m);
+    updateHeaders();
+    refreshGroupSpans();
+    rebuildRows();
+    layout();
+    vp.scrollTop = 0;
+    vp.scrollLeft = 0;
+  }
+
+  // 每个槽位重新绑定时，先把 5 条进度条都藏起来、复位样式
+  function hideAllBars(slot) {
+    for (var p = 0; p < slot.bars.length; p++) {
+      var bar = slot.bars[p];
+      bar.className = 'bar';
+      bar._d = null;
+      bar.style.display = 'none';
+      bar.style.top = '';
+      bar.style.height = '';
+      bar.style.background = '';
+      bar.style.transform = '';
+      bar.style.width = '';
+      slot.lbls[p].textContent = '';
+    }
+  }
+
+  function bindGroupRow(slot, r) {
+    var gi = r.i;
+    var gm = groupMeta(gi);
+    slot.el.className = 'row ship';
+    if (isNoDataGroup(gi)) {
+      slot.caret.textContent = noDataCollapsed ? '\u25B6' : '\u25BC';
+      slot.caret.style.cursor = 'pointer';
+    } else {
+      slot.caret.textContent = '\u203A';
+      slot.caret.style.cursor = '';
+    }
+    slot.dot.style.display = 'none';
+    slot.txt.textContent = gm[0];
+    slot.type.textContent = gm[1] || '';
+    slot.ton.textContent = (isNoDataGroup(gi) && noDataHulls.length)
+      ? (noDataHulls.length + '艘待排产') : '';
+    slot.shop.textContent = '';
+
+    if (phaseKey === 'multi') {
+      // 同一行叠放 5 条彩色汇总条（每条对应一个阶段的整组跨度）
+      var spans = groupPhaseSpans()[gi];
+      for (var p = 0; p < MULTI.length; p++) {
+        var bar = slot.bars[p];
+        placeBar(bar, MULTI_TOP + p * MULTI_LANE, MULTI_BAR_H);
+        bar.style.background = PHASES[MULTI[p]].color;
+        var sp = spans[p];
+        if (sp) {
+          bar.style.display = '';
+          bar._d = sp[0];
+          bar.style.transform = 'translateX(' + ((sp[0] - viewStart) * px) + 'px)';
+          bar.style.width = Math.max(3, (sp[1] - sp[0] + 1) * px - 1) + 'px';
+        }
+      }
+      var spAll = groupSpans[gi];       // multi 下 groupSpans = 全流程跨度
+      slot.start.textContent = spAll ? fmtMD(spAll[0]) : '—';
+      slot.dur.textContent = spAll ? (spAll[1] - spAll[0] + 1) + '天' : '待定';
+      slot.start.className = 'cell' + (spAll ? '' : ' na');
+      slot.dur.className = 'cell' + (spAll ? '' : ' na');
+      return;
+    }
+
+    // 单阶段：单条汇总条
+    var sp = groupSpans[gi];
+    slot.start.textContent = sp ? fmtMD(sp[0]) : '—';
+    slot.dur.textContent = sp ? (sp[1] - sp[0] + 1) + '天' : '待定';
+    slot.start.className = 'cell' + (sp ? '' : ' na');
+    slot.dur.className = 'cell' + (sp ? '' : ' na');
+    var bar = slot.bars[0];
+    bar.classList.add('summary');
+    // 具体阶段下组汇总条也显示该阶段颜色；all 保持灰色
+    bar.style.background = (phaseKey === 'all') ? '' : PHASES[phaseKey].color;
+    if (sp) {
+      bar.style.display = '';
+      bar._d = sp[0];
+      bar.style.transform = 'translateX(' + ((sp[0] - viewStart) * px) + 'px)';
+      bar.style.width = Math.max(3, (sp[1] - sp[0] + 1) * px - 1) + 'px';
+    }
+  }
+
+  // 没有工期的船（无任何分段）在总览末尾单独一行：归入「暂无车间 / 暂无工期」
+  function bindNoDataShipRow(slot, r) {
+    var h = hulls[r.i];
+    slot.el.className = 'row' + (slot.idx % 2 === 1 ? ' alt' : '');
+    slot.caret.textContent = '';
+    slot.dot.style.display = '';
+    slot.dot.style.background = PHASES.all.color;
+    if (groupMode === 'shop') {
+      slot.txt.textContent = '暂无车间';        // 车间 / 分段
+      slot.type.textContent = h[0];            // 船号
+      slot.ton.textContent = '';
+      slot.shop.textContent = h[1] || '';      // 类型 → 船型
+    } else {
+      slot.txt.textContent = h[0];             // 分段 / 船 → 船号
+      slot.type.textContent = h[1] || '';      // 类型 → 船型
+      slot.ton.textContent = '';
+      slot.shop.textContent = '';
+    }
+    slot.start.className = 'cell na';
+    slot.dur.className = 'cell na';
+    slot.start.textContent = '—';
+    slot.dur.textContent = '待定';
+    slot.el.title = '该船暂无工期数据';
+  }
+
+  function bindBlockRow(slot, r, ri) {
+    var b = blocks[r.i];
+    slot.el.className = 'row' + (ri % 2 === 1 ? ' alt' : '');
+    slot.caret.textContent = '';
+    slot.dot.style.display = '';
+    slot.txt.textContent = b[1] || '';
+    if (groupMode === 'shop') {
+      // 车间视图：第 2 列显示船号，第 4 列显示分段类型（车间列让位给类型）
+      slot.type.textContent = hulls[b[0]][0];
+      slot.ton.textContent = b[3] ? b[3] : '';
+      slot.shop.textContent = types[b[2]] || '';
+    } else {
+      slot.type.textContent = types[b[2]] || '';
+      slot.ton.textContent = b[3] ? b[3] : '';
+      slot.shop.textContent = shops[b[5]] || (areas[b[4]] || '');
+    }
+    slot.el.title = '';
+
+    if (phaseKey === 'multi') {
+      // 同一行叠放 5 条进度条，每条对应一个阶段、颜色不同
+      slot.dot.style.background = PHASES.all.color;
+      var overall = barOf(b, 'all');
+      if (overall) {
+        slot.start.className = 'cell';
+        slot.dur.className = 'cell';
+        slot.start.textContent = fmtMD(overall[0]);
+        slot.dur.textContent = (overall[1] - overall[0] + 1) + '天';
+      } else {
+        slot.start.className = 'cell na';
+        slot.dur.className = 'cell na';
+        slot.start.textContent = '—';
+        slot.dur.textContent = '待定';
+      }
+      var anyBar = false;
+      for (var p = 0; p < MULTI.length; p++) {
+        var bar = slot.bars[p];
+        placeBar(bar, MULTI_TOP + p * MULTI_LANE, MULTI_BAR_H);
+        bar.style.background = PHASES[MULTI[p]].color;
+        var bb = barOf(b, MULTI[p]);
+        if (bb) {
+          anyBar = true;
+          bar.style.display = '';
+          var w = Math.max(2, (bb[1] - bb[0] + 1) * px - 1);
+          bar._d = bb[0];
+          bar.style.transform = 'translateX(' + ((bb[0] - viewStart) * px) + 'px)';
+          bar.style.width = w + 'px';
+          if (bb[2]) bar.classList.add('open');          // 未填完工日期：画到今天
+          else if (bb[1] < today) bar.classList.add('done');
+          else if (bb[0] > today) bar.classList.add('future');
+        }
+      }
+      if (anyBar) slot.el.classList.remove('nodate');
+      else slot.el.classList.add('nodate');
+      return;
+    }
+
+    // 单阶段（含 all「全流程」）
+    slot.dot.style.background = PHASES[phaseKey].color;
+    var bar = slot.bars[0];
+    var bb = barOf(b, phaseKey);
+    if (bb) {
+      bar.style.display = '';
+      placeBar(bar, 9, 16);
+      slot.start.className = 'cell';
+      slot.dur.className = 'cell';
+      slot.start.textContent = fmtMD(bb[0]);
+      slot.dur.textContent = (bb[1] - bb[0] + 1) + '天' + (bb[2] ? '*' : '');
+      var w = Math.max(2, (bb[1] - bb[0] + 1) * px - 1);
+      bar._d = bb[0];
+      bar.style.transform = 'translateX(' + ((bb[0] - viewStart) * px) + 'px)';
+      bar.style.width = w + 'px';
+      bar.style.background = PHASES[phaseKey].color;
+      slot.el.classList.remove('nodate');
+      if (bb[2]) bar.classList.add('open');
+      else if (bb[1] < today) bar.classList.add('done');
+      else if (bb[0] > today) bar.classList.add('future');
+      slot.lbls[0].textContent = w > 46 ? (b[1] || '') : '';
+    } else {
+      // 这一段还没填这个阶段的任何日期
+      slot.el.classList.add('nodate');
+      slot.start.className = 'cell na';
+      slot.dur.className = 'cell na';
+      slot.start.textContent = '—';
+      slot.dur.textContent = '待定';
+    }
+  }
+
+  function bindRow(slot, ri) {
+    var r = rows[ri];
+    slot.idx = ri;
+    slot.el._rowIndex = ri;
+    slot.el.style.transform = 'translateY(' + (ri * rowH()) + 'px)';
+    hideAllBars(slot);
+    if (r.k === 's') bindGroupRow(slot, r);
+    else if (r.k === 'n') bindNoDataShipRow(slot, r);
+    else bindBlockRow(slot, r, ri);
+  }
+
+  function ensurePool(n) {
+    while (pool.length < n) {
+      var s = makeSlot();
+      rowsEl.appendChild(s.el);
+      pool.push(s);
+    }
+  }
+  function invalidate() {
+    for (var i = 0; i < pool.length; i++) pool[i].idx = -1;
+    renderWindow(true);
+  }
+
+  function renderWindow(force) {
+    var visH = vp.clientHeight - headH();
+    var vis = Math.max(1, Math.ceil(visH / rowH()));
+    var first = Math.max(0, Math.floor(vp.scrollTop / rowH()) - BUFFER);
+    var count = Math.min(Math.max(0, rows.length - first), vis + BUFFER * 2 + 1);
+    ensurePool(count);
+
+    for (var i = 0; i < pool.length; i++) {
+      var s = pool[i];
+      if (i >= count) { if (s.el.style.display !== 'none') s.el.style.display = 'none'; continue; }
+      if (s.el.style.display === 'none') s.el.style.display = '';
+      var idx = first + i;
+      if (s.idx !== idx || force) bindRow(s, idx);
+    }
+    $('s-dom').textContent = count.toLocaleString();
+  }
+
+  /* ---------------- 交互 ---------------- */
+  var ticking = false;
+  vp.addEventListener('scroll', function () {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () { ticking = false; renderWindow(false); updateMarker(); hideTip(); });
+  }, { passive: true });
+
+  function setScale(key) {
+    cancelWheelZoom();
+    customPx = null;
+    var centerDay = viewStart + (vp.scrollLeft + (vp.clientWidth - LEFT_W) / 2) / px;
+    scaleKey = key;
+    px = scalePx(key);
+    setScaleButtons(key);
+    layout();
+    if (key === 'month') {
+      vp.scrollLeft = 0;
+    } else if (focus >= 0) {
+      vp.scrollLeft = Math.max(0, (centerDay - viewStart) * px - (vp.clientWidth - LEFT_W) / 2);
+    } else {
+      vp.scrollLeft = 0;   // 总览切换密度时从头看，避免落到空白区
+    }
+  }
+
+  // Ctrl+滚轮只缩放时间轴，以红线日期在屏幕中的位置为锚点。
+  function cancelWheelZoom() {
+    if (zoomFrame !== null) cancelAnimationFrame(zoomFrame);
+    zoomFrame = null;
+    wheelZoom = 0;
+  }
+
+  function applyWheelZoom() {
+    zoomFrame = null;
+    var delta = wheelZoom;
+    wheelZoom = 0;
+    if (!delta || !rows.length || vp.clientWidth <= LEFT_W) return;
+    var next = Math.max(fitScale(), Math.min(MAX_DAY_PX, px * Math.exp(delta)));
+    if (Math.abs(next - px) < 0.0001) return;
+    var visibleWidth = vp.clientWidth - LEFT_W;
+    var anchorDay = markerDay >= viewStart && markerDay < viewStart + totalDays
+      ? markerDay + 0.5 : viewStart + (vp.scrollLeft + visibleWidth / 2) / px;
+    var anchorX = LEFT_W + (anchorDay - viewStart) * px - vp.scrollLeft;
+    // 红线已滚出屏幕时，缩放把该日期带回可视区域中间。
+    if (anchorX < LEFT_W || anchorX > vp.clientWidth) anchorX = LEFT_W + visibleWidth / 2;
+    stopMarkerDrag();
+    hideTip();
+    customPx = next;
+    layout(true);
+    vp.scrollLeft = Math.max(0, LEFT_W + (anchorDay - viewStart) * px - anchorX);
+    updateMarker();
+  }
+
+  vp.addEventListener('wheel', function (e) {
+    if (!e.ctrlKey) return;
+    // 非被动监听阻止浏览器整页缩放；普通滚轮仍按原方式滚动。
+    e.preventDefault();
+    if (!rows.length || !hasData) return;
+    var delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? vp.clientHeight : 1);
+    if (!isFinite(delta) || !delta) return;
+    wheelZoom = Math.max(-8, Math.min(8, wheelZoom - Math.max(-500, Math.min(500, delta)) * 0.002));
+    if (zoomFrame === null) zoomFrame = requestAnimationFrame(applyWheelZoom);
+  }, { passive: false });
+
+  // 月：整段铺满；周：约 3 屏宽；日：单船按该船跨度铺满，总览放大 8 倍
+  function scalePx(key) {
+    var fit = fitScale();
+    if (key === 'month') return fit;
+    if (key === 'week') return Math.min(18, Math.max(2.5, fit * 3));
+    return focus >= 0
+      ? Math.min(40, Math.max(3, fit))
+      : Math.min(14, Math.max(4, fit * 8));
+  }
+
+  // 月视图：把整段数据宽度铺满可视区，打开就是全貌
+  function fitScale() {
+    var avail = vp.clientWidth - LEFT_W - 26;
+    return Math.max(0.85, Math.min(13, avail / totalDays));
+  }
+
+  // 月视图：把整段数据宽度铺满可视区，打开就是全貌
+  function fitScale() {
+    var avail = vp.clientWidth - LEFT_W - 26;
+    return Math.max(0.85, Math.min(13, avail / totalDays));
+  }
+
+  function setPhase(key) {
+    var wasMulti = phaseKey === 'multi';
+    phaseKey = key;
+    refreshGroupSpans();
+    if (key === 'multi' || wasMulti) {
+      // multi 会改变行高（一行叠放 5 条进度条），需要重排行与时间轴
+      rebuildRows();
+      layout();
+      vp.scrollTop = 0;
+      vp.scrollLeft = 0;
+    } else {
+      invalidate();
+      // 阶段跨度不同（拼板含 2015/2021 年数据、舾装只有 2026 年）：
+      // 重算时间轴范围，避免进度条画到轴外、指针换算失效。
+      layout();
+      vp.scrollLeft = 0;
+    }
+  }
+
+
+  function scrollToToday() {
+    markerDay = today;
+    updateMarker();
+    var idx = today - viewStart;
+    if (idx < 0 || idx >= totalDays) return;
+    var target = LEFT_W + idx * px - (vp.clientWidth + LEFT_W) / 2;
+    vp.scrollLeft = Math.max(0, target);
+    updateMarker();
+  }
+
+  /* ---------------- 可拖动日期参考线 ---------------- */
+  function updateMarker() {
+    var ti = markerDay - viewStart;
+    var x = LEFT_W + (ti + 0.5) * px;
+    var visibleX = x - vp.scrollLeft;
+    todayEl.style.display = ti >= 0 && ti < totalDays && rows.length ? '' : 'none';
+    // 横向滚动时不让红线覆盖左侧冻结列。
+    todayEl.style.visibility = visibleX >= LEFT_W && visibleX < vp.clientWidth ? 'visible' : 'hidden';
+    todayEl.style.left = x + 'px';
+    todayEl.style.height = (rows.length * rowH()) + 'px';
+    var tag = todayEl.firstElementChild;
+    tag.textContent = markerDay === today ? '今天' : fmtFull(markerDay);
+    tag.style.top = Math.max(0, Math.min(vp.scrollTop, rows.length * rowH() - 18)) + 'px';
+    // 日期标签在左右边缘仍完整可见。
+    var half = tag.offsetWidth / 2;
+    var shift = Math.max(LEFT_W + half + 2, Math.min(vp.clientWidth - half - 2, visibleX)) - visibleX;
+    tag.style.transform = 'translateX(calc(-50% + ' + shift + 'px))';
+    todayEl.setAttribute('aria-valuemin', Math.min(viewStart, markerDay));
+    todayEl.setAttribute('aria-valuemax', Math.max(viewStart + totalDays - 1, markerDay));
+    todayEl.setAttribute('aria-valuenow', markerDay);
+    todayEl.setAttribute('aria-valuetext', fmtFull(markerDay));
+    $('s-marker').textContent = fmtFull(markerDay);
+  }
+
+  function setMarker(day) {
+    markerDay = Math.max(viewStart, Math.min(viewStart + totalDays - 1, Math.round(day)));
+    updateMarker();
+  }
+
+  function moveMarkerFromPointer() {
+    if (!markerDrag) return;
+    var rect = vp.getBoundingClientRect();
+    var localX = Math.max(LEFT_W, Math.min(vp.clientWidth - 1, markerDrag.x - rect.left));
+    setMarker(viewStart + (localX + vp.scrollLeft - LEFT_W - markerDrag.offset) / px - 0.5);
+  }
+
+  function panMarker() {
+    if (!markerDrag) return;
+    var localX = markerDrag.x - vp.getBoundingClientRect().left;
+    var speed = localX < LEFT_W + 28 ? -12 : localX > vp.clientWidth - 28 ? 12 : 0;
+    var before = vp.scrollLeft;
+    if (speed) vp.scrollLeft += speed;
+    if (before !== vp.scrollLeft) moveMarkerFromPointer();
+    markerFrame = requestAnimationFrame(panMarker);
+  }
+
+  todayEl.addEventListener('pointerdown', function (e) {
+    if (markerDrag || !e.isPrimary || e.button !== 0) return;
+    if (e.ctrlKey) {
+      // 按住 Ctrl：红线锁定不可拖动；但未完工条的显示右端=今天，会被红线压住，
+      // 此时把事件转给底下的进度条，让它照常伸缩。
+      var under = document.elementsFromPoint(e.clientX, e.clientY);
+      for (var i = 0; i < under.length; i++) {
+        var bel = under[i];
+        if (bel && bel.classList && bel.classList.contains('bar') && bel._slot) {
+          onBarPointerDown(e, bel._slot, bel._p);
+          return;
+        }
+      }
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    hideTip();
+    todayEl.focus({ preventScroll: true });
+    markerDrag = { id: e.pointerId, x: e.clientX,
+      offset: e.clientX - vp.getBoundingClientRect().left + vp.scrollLeft - LEFT_W - (markerDay - viewStart + 0.5) * px };
+    todayEl.setPointerCapture(e.pointerId);
+    todayEl.classList.add('dragging');
+    document.body.classList.add('dragging-date');
+    markerFrame = requestAnimationFrame(panMarker);
+  });
+  todayEl.addEventListener('pointermove', function (e) {
+    if (!markerDrag || e.pointerId !== markerDrag.id) return;
+    e.preventDefault();
+    markerDrag.x = e.clientX;
+    moveMarkerFromPointer();
+  });
+  todayEl.addEventListener('pointermove', function (e) {
+    // 按住 Ctrl 悬停红线：若底下压着进度条的伸缩区，光标显示左右箭头
+    if (!ctrlHeld) { todayEl.style.cursor = ''; return; }
+    var cur = 'not-allowed';
+    var under = document.elementsFromPoint(e.clientX, e.clientY);
+    for (var i = 0; i < under.length; i++) {
+      var bel = under[i];
+      if (bel && bel.classList && bel.classList.contains('bar') && bel._slot) {
+        if (phaseKey !== 'all' && barResizeMode(bel, e.clientX)) cur = 'ew-resize';
+        break;
+      }
+    }
+    todayEl.style.cursor = cur;
+  });
+  function stopMarkerDrag(e) {
+    if (!markerDrag || (e && e.pointerId != null && e.pointerId !== markerDrag.id)) return;
+    var id = markerDrag.id;
+    markerDrag = null;
+    cancelAnimationFrame(markerFrame);
+    markerFrame = null;
+    todayEl.classList.remove('dragging');
+    document.body.classList.remove('dragging-date');
+    if (todayEl.hasPointerCapture(id)) todayEl.releasePointerCapture(id);
+  }
+  todayEl.addEventListener('pointerup', stopMarkerDrag);
+  todayEl.addEventListener('pointercancel', stopMarkerDrag);
+  todayEl.addEventListener('lostpointercapture', stopMarkerDrag);
+  window.addEventListener('blur', function () { stopMarkerDrag(); });
+  todayEl.addEventListener('click', function (e) { e.stopPropagation(); });
+  todayEl.addEventListener('dblclick', function (e) { e.stopPropagation(); scrollToToday(); });
+  todayEl.addEventListener('keydown', function (e) {
+    var step = e.shiftKey ? 7 : 1;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') setMarker(markerDay - step);
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') setMarker(markerDay + step);
+    else if (e.key === 'Home') setMarker(viewStart);
+    else if (e.key === 'End') setMarker(viewStart + totalDays - 1);
+    else return;
+    e.preventDefault();
+    var x = (markerDay - viewStart + 0.5) * px;
+    if (x < vp.scrollLeft || x > vp.scrollLeft + vp.clientWidth - LEFT_W - 2)
+      vp.scrollLeft = Math.max(0, x - (vp.clientWidth - LEFT_W) / 2);
+    updateMarker();
+  });
+
+  // 在时间轴区域单击左键：红线跳到鼠标所在的日期。
+  vp.addEventListener('click', function (e) {
+    if (e.button !== 0) return;
+    if (e.ctrlKey) return;   // 按住 Ctrl 时红线锁定（点击也不再跳日期）
+    if (e.target && e.target.closest && e.target.closest('#todayLine')) return;
+    var rect = vp.getBoundingClientRect();
+    var localX = e.clientX - rect.left;
+    if (localX < LEFT_W || localX >= vp.clientWidth) return;   // 冻结列 / 越界
+    var day = viewStart + (localX + vp.scrollLeft - LEFT_W) / px - 0.5;
+    setMarker(Math.round(day));
+    hideTip();
+  });
+
+  /* ---------------- 提示 ---------------- */
+  function showTip(ri, ev) {
+    var r = rows[ri];
+    if (!r || r.k !== 'b') return;
+    var b = blocks[r.i];
+    var h = hulls[b[0]];
+    var html = '<h4>' + esc(h[0]) + ' · ' + esc(b[1] || '') + '</h4>';
+    html += '<div class="r"><span>类型 / 吨位</span><b>' + esc(types[b[2]] || '-') + ' / ' + (b[3] || '-') + '</b></div>';
+    html += '<div class="r"><span>车间</span><b>' + esc(shops[b[5]] || '-') + '</b></div>';
+    ['pb', 'tt', 'jg', 'sn', 'zx'].forEach(function (k) {
+      var bb = barOf(b, k);
+      if (!bb) {
+        html += '<div class="r"><span>' + PHASES[k].name + '</span><b class="na">还没有具体时间 / 工期</b></div>';
+        return;
+      }
+      var txt = fmtFull(bb[0]);
+      if (bb[1] !== bb[0]) txt += ' → ' + fmtFull(bb[1]);
+      if (bb[2]) txt += ' <i class="open">未完工（画到今天）</i>';
+      html += '<div class="r"><span>' + PHASES[k].name + '</span><b>' + txt + '</b></div>';
+    });
+    tipEl.innerHTML = html;
+    tipEl.classList.add('show');
+    moveTip(ev);
+  }
+  function moveTip(ev) {
+    var x = ev.clientX + 14, y = ev.clientY + 14;
+    var w = tipEl.offsetWidth, hh = tipEl.offsetHeight;
+    if (x + w > window.innerWidth - 8) x = ev.clientX - w - 14;
+    if (y + hh > window.innerHeight - 8) y = ev.clientY - hh - 14;
+    tipEl.style.left = x + 'px';
+    tipEl.style.top = y + 'px';
+  }
+  function hideTip() { tipEl.classList.remove('show'); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  rowsEl.addEventListener('mousemove', function (e) {
+    var el = e.target.closest ? e.target.closest('.row') : null;
+    if (!el || el._rowIndex == null) { hideTip(); return; }
+    var r = rows[el._rowIndex];
+    if (!r || r.k !== 'b') { hideTip(); return; }
+    showTip(el._rowIndex, e);
+  });
+  rowsEl.addEventListener('mouseleave', hideTip);
+
+  /* ---------------- 进度条拖拽（改日期，详细信息跟随） ---------------- */
+  var barDrag = null;
+  var barPanFrame = null;   // 拖动时边缘自动滚动的 rAF 句柄
+  var dragEnabled = true;   // 拖动开关：false 时所有进度条都拖不动
+  var hoverBar = null, hoverX = 0, ctrlHeld = false;  // Ctrl+两端悬停时的伸缩光标
+
+  function barDayFromClientX(clientX) {
+    var rect = vp.getBoundingClientRect();
+    return (clientX - rect.left + vp.scrollLeft - LEFT_W) / px + viewStart;
+  }
+  function phaseSlots(phase) {
+    if (phase === 'all') return null;   // 全流程没有单一槽位：只能整体平移
+    var ph = PHASES[phase];
+    return [ph.s, ph.e];
+  }
+  // 伸缩判定区：较宽的条取左右各 30%；窄条（<12px）左右各半，保证小条也点得中
+  function resizeZones(wpx) {
+    if (wpx >= 12) return [wpx * 0.3, wpx * 0.3];
+    return [wpx * 0.5, wpx * 0.5];
+  }
+  // 是否处于「Ctrl + 两端」伸缩状态（未拖动时用于悬停光标，拖动时决定缩放方向）
+  function barResizeMode(barEl, clientX) {
+    if (!ctrlHeld) return null;
+    var wpx = barEl.offsetWidth || 0;
+    if (wpx < 2) return null;
+    var localX = clientX - barEl.getBoundingClientRect().left;
+    var z = resizeZones(wpx);
+    if (localX <= z[0]) return 'resize-l';
+    if (localX >= wpx - z[1]) return 'resize-r';
+    return null;
+  }
+  function setBarHoverCursor() {
+    if (!hoverBar || barDrag) return;
+    var row = hoverBar.closest('.row');
+    var ri = row && row._rowIndex != null ? row._rowIndex : -1;
+    var r = ri >= 0 ? rows[ri] : null;
+    // 分段行和汇总行都能伸缩；「全流程」视图没有单一槽位，只能平移
+    var resizable = !!(r && (r.k === 'b' || r.k === 's') && phaseKey !== 'all');
+    var mode = resizable ? barResizeMode(hoverBar, hoverX) : null;
+    if (mode) hoverBar.style.cursor = 'ew-resize';
+    // 按住 Ctrl 时任何进度条都不能移动，用禁拖光标提示
+    else hoverBar.style.cursor = ctrlHeld ? 'not-allowed' : '';
+  }
+  function onBarPointerLeave(e) {
+    if (barDrag) return;
+    if (hoverBar === e.currentTarget) {
+      hoverBar = null;
+      e.currentTarget.style.cursor = '';
+    }
+  }
+  // 为一次拖拽准备要改的分段列表 + 每个分段的原始槽位快照
+  function snapBlocks(bis, slots) {
+    var orig = [];
+    for (var i = 0; i < bis.length; i++) {
+      var b = blocks[bis[i]];
+      if (slots) {
+        orig.push({ s: b[slots[0]], e: b[slots[1]] });
+      } else {
+        var all = [];
+        for (var k = 6; k < 16; k++) all.push(b[k]);
+        orig.push({ all: all });
+      }
+    }
+    return orig;
+  }
+
+  function onBarPointerDown(e, slot, p) {
+    if (e.button !== 0 || !e.isPrimary || barDrag) return;
+    if (!dragEnabled) return;                  // 已禁用拖动
+    var ri = slot.idx;
+    if (ri < 0 || ri >= rows.length) return;
+    var r = rows[ri];
+    if (!r) return;
+    var phase = (phaseKey === 'multi') ? MULTI[p] : phaseKey;
+    var slots = phaseSlots(phase);
+    var barEl = slot.bars[p];
+
+    var bis, start, isGroup = false;
+    if (r.k === 'b') {
+      // 单个分段行：移动 + 两端改长短
+      var bb = barOf(blocks[r.i], phase);
+      if (!bb) return;
+      bis = [r.i];
+      start = bb[0];
+    } else if (r.k === 's') {
+      // 汇总行（船/车间）：拖动整组一起平移（只移动，不改长短）
+      var list = groupList()[r.i];
+      if (!list || !list.length) return;
+      var sp = (phaseKey === 'multi') ? groupPhaseSpans()[r.i][p] : groupSpans[r.i];
+      if (!sp) return;
+      bis = list.slice();
+      start = sp[0];
+      isGroup = true;
+    } else {
+      return;
+    }
+
+    var wpx = barEl.offsetWidth || 1;
+    var localX = e.clientX - barEl.getBoundingClientRect().left;
+    var z = resizeZones(wpx);
+    var mode = 'move';
+    if (e.ctrlKey) {
+      // 按住 Ctrl：任何进度条都不能移动；落在左右伸缩区内则改长短
+      // （汇总条同样可伸缩：整组两端日期一起改，条身位置固定）
+      if (!slots) return;                 // 全流程没有单一槽位：既不伸缩也不移动
+      if (localX <= z[0]) mode = 'resize-l';
+      else if (localX >= wpx - z[1]) mode = 'resize-r';
+      else return;                         // 中间区：既不移动也不伸缩
+    }
+
+    // 伸缩锚点用「当前显示的两端」（barOf 结果）：
+    // 未填完工日期的条，显示右端=今天，原始完工列却是 0，不能拿 0 当锚点。
+    var disp = [];
+    for (var di = 0; di < bis.length; di++) {
+      var dbb = barOf(blocks[bis[di]], phase);
+      disp.push(dbb ? [dbb[0], dbb[1]] : null);
+    }
+
+    barDrag = {
+      id: e.pointerId, bis: bis, phase: phase, slots: slots, mode: mode,
+      isGroup: isGroup,
+      start: start, grab: barDayFromClientX(e.clientX) - start,
+      grabDay: barDayFromClientX(e.clientX),
+      end0: isGroup ? sp[1] : null,   // 汇总条拖动时的组右边界（供整体滑动护栏用）
+      viewStart0: viewStart,   // 拖动开始时的轴起点，用于松开时判断是否向左拖进了过去
+      orig: snapBlocks(bis, slots),
+      disp: disp,
+      slot: slot, barEl: barEl, p: p,
+      clientX: e.clientX, clientY: e.clientY
+    };
+    e.preventDefault();
+    e.stopPropagation();
+    hideTip();
+    barEl.setPointerCapture(e.pointerId);
+    barEl.classList.add('dragging');
+    document.body.classList.add('dragging-date');
+    if (!isGroup) showTip(ri, e);   // 只有分段行有详细信息浮层
+    barPanFrame = requestAnimationFrame(panBarDrag);
+  }
+
+  function applyBarDrag() {
+    var d = barDrag;
+    if (!d) return;
+    var dayF = barDayFromClientX(d.clientX);
+    var delta = Math.round(dayF - d.grab) - d.start;
+    // 汇总条拖动的目标边界（成员滑动护栏的落点）；组边界可以相遇（1 天）但不得交叉
+    var gL = d.isGroup ? d.start + delta : 0;
+    var gR = d.isGroup ? d.end0 + delta : 0;
+    if (d.isGroup) {
+      if (gR < d.start) gR = d.start;
+      if (gL > d.end0) gL = d.end0;
+    }
+    for (var i = 0; i < d.bis.length; i++) {
+      var b = blocks[d.bis[i]];
+      var orig = d.orig[i];
+      if ((d.mode === 'resize-l' || d.mode === 'resize-r') && !d.disp[i]) {
+        // 该分段在本阶段没有任何日期（组汇总跨度里也不含它）：伸缩时必须跳过。
+        // 否则会凭空写出「日期 = 拖拽偏移」的假起点，把整组拖到几千天之前。
+        continue;
+      }
+      if (d.mode === 'move') {
+        if (d.slots) {
+          var sIdx = d.slots[0], eIdx = d.slots[1];
+          if (orig.s) b[sIdx] = orig.s + delta;
+          if (orig.e) b[eIdx] = orig.e + delta;
+        } else {
+          for (var k = 6; k < 16; k++) b[k] = orig.all[k - 6] ? orig.all[k - 6] + delta : 0;
+        }
+      } else if (d.mode === 'resize-l') {
+        // 以显示左端为锚点；护栏用「显示右端」——起止颠倒的数据里原始列是反的，
+        // 用原始列当护栏会把收缩方向锁死。唯一约束：总长度 > 0。
+        var dd = d.disp[i];
+        var ns0 = (dd ? dd[0] : orig.s) + Math.round(dayF - d.grabDay);
+        var oppE = (dd ? dd[1] : orig.e);
+        var ns = ns0;
+        if (oppE && ns > oppE) ns = oppE;
+        b[d.slots[0]] = ns;
+        // 闭合且起止颠倒的条：把终点也写成升序，避免显示时又被换位（未完工条保持 0）
+        if (oppE && orig.e) b[d.slots[1]] = Math.max(ns, oppE);
+        // 汇总条（整组）：只有「终点早于拖拽边界、会钉住组左边界」的成员才整体滑到
+        // 目标位置（保持 1 天），让组边界始终跟随光标。
+        if (d.isGroup && oppE && ns0 > oppE && oppE < gL) {
+          b[d.slots[0]] = gL;
+          b[d.slots[1]] = gL;
+        }
+      } else { // resize-r
+        // 以显示右端为锚点（未填完工日期的条显示右端=今天）；护栏用「显示左端」，
+        // 收缩右端时按显示位置放行，不再被颠倒的原始起点卡死。
+        var dd2 = d.disp[i];
+        var ne0 = (dd2 ? dd2[1] : orig.e) + Math.round(dayF - d.grabDay);
+        var oppS = (dd2 ? dd2[0] : orig.s);
+        var ne = ne0;
+        if (oppS && ne < oppS) ne = oppS;
+        b[d.slots[1]] = ne;
+        if (oppS) b[d.slots[0]] = Math.min(ne, oppS);
+        // 汇总条（整组）：只有「起点越过拖拽边界、会钉住组右边界」的成员才整体滑到
+        // 目标位置（保持 1 天）。
+        if (d.isGroup && oppS && ne0 < oppS && oppS > gR) {
+          b[d.slots[0]] = gR;
+          b[d.slots[1]] = gR;
+        }
+      }
+    }
+    refreshBarAfterDrag(d);
+  }
+
+  function refreshBarAfterDrag(d) {
+    var ri = d.slot.idx;
+    var r = rows[ri];
+    if (!r) return;
+    var ns = null, ne = null;
+    if (r.k === 'b') {
+      var b = blocks[r.i];
+      var bb = barOf(b, d.phase);
+      if (bb) {
+        ns = bb[0]; ne = bb[1];
+        d.barEl.style.display = '';
+        var w = Math.max(2, (bb[1] - bb[0] + 1) * px - 1);
+        d.barEl._d = bb[0];
+        d.barEl.style.transform = 'translateX(' + ((bb[0] - viewStart) * px) + 'px)';
+        d.barEl.style.width = w + 'px';
+      }
+      var overall = barOf(b, effKey());
+      if (overall) {
+        d.slot.start.className = 'cell';
+        d.slot.dur.className = 'cell';
+        d.slot.start.textContent = fmtMD(overall[0]);
+        d.slot.dur.textContent = (overall[1] - overall[0] + 1) + '天' + ((phaseKey !== 'multi' && overall[2]) ? '*' : '');
+      } else {
+        d.slot.start.className = 'cell na';
+        d.slot.dur.className = 'cell na';
+        d.slot.start.textContent = '—';
+        d.slot.dur.textContent = '待定';
+      }
+      // 详细信息（tooltip）跟随刷新
+      if (tipEl.classList.contains('show')) showTip(ri, { clientX: d.clientX, clientY: d.clientY });
+    } else if (r.k === 's') {
+      var gi = r.i;
+      var list = groupList()[gi];
+      var sp = groupSpan(list, d.phase);
+      if (sp) {
+        ns = sp[0]; ne = sp[1];
+        d.barEl.style.display = '';
+        var w2 = Math.max(2, (sp[1] - sp[0] + 1) * px - 1);
+        d.barEl._d = sp[0];
+        d.barEl.style.transform = 'translateX(' + ((sp[0] - viewStart) * px) + 'px)';
+        d.barEl.style.width = w2 + 'px';
+      }
+      var spRep = groupSpan(list, effKey());
+      d.slot.start.textContent = spRep ? fmtMD(spRep[0]) : '—';
+      d.slot.dur.textContent = spRep ? (spRep[1] - spRep[0] + 1) + '天' : '待定';
+      d.slot.start.className = 'cell' + (spRep ? '' : ' na');
+      d.slot.dur.className = 'cell' + (spRep ? '' : ' na');
+    }
+    if (ne !== null) {
+      d.span = [ns, ne];
+      axisExtendLeft(ns);      // 向左拖过轴起点：拖动中即时向左铺轴
+      axisExtendRight(ne);
+    }
+  }
+
+  // 拖动中只向右（未来）扩展时间轴：px 与 viewStart 保持冻结，避免破坏拖拽换算。
+  function axisExtendRight(e) {
+    var pad = 30;
+    var axisR = viewStart + totalDays - 1;
+    if (e > axisR) {
+      totalDays = (e + pad) - viewStart + 1;
+      refreshAxisGeometry();
+    }
+  }
+  // 拖动中向左（过去）扩展时间轴。viewStart 前移后必须同步增大 scrollLeft，
+  // 才能让「指针 x → 日期」的换算与所有条目的屏幕位置完全不变；
+  // 新增的过去区间随后由边缘自动滚动（panBarDrag）自然滚入视野。
+  function axisExtendLeft(s) {
+    // 每次至少让轴向左多出 30 天；缩放很低（px 很小）时按像素补足，
+    // 避免边缘自动滚动时轴频繁重铺。
+    var pad = Math.max(30, Math.round(160 / px));
+    if (s < viewStart) {
+      var shift = viewStart - s + pad;
+      viewStart -= shift;
+      totalDays += shift;
+      // 先加宽内容区再补 scrollLeft：否则浏览器会因内容还不够宽而把
+      // scrollLeft 钳回 0，指针→日期换算随即崩塌（条被拖到几千天之前）。
+      refreshAxisGeometry();
+      vp.scrollLeft += shift * px;
+      reflowAllBars();
+      return true;
+    }
+    return false;
+  }
+  // 轴左移后按新 viewStart 重排所有已渲染进度条（宽度与日期无关，只需刷新位移）。
+  function reflowAllBars() {
+    var els = rowsEl.querySelectorAll('.bar');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (el._d != null && el.style.display !== 'none') {
+        el.style.transform = 'translateX(' + ((el._d - viewStart) * px) + 'px)';
+      }
+    }
+  }
+  // 仅重铺轴与轨道几何，不重算 px、不触发整体缩放。
+  function refreshAxisGeometry() {
+    var trackW = totalDays * px;
+    content.style.width = (LEFT_W + trackW) + 'px';
+    bg.style.width = trackW + 'px';
+    buildHeader();
+    updateMarker();
+  }
+
+  function onBarPointerMove(e) {
+    if (!barDrag || e.pointerId !== barDrag.id) {
+      // 未拖动时：Ctrl + 两端悬停显示左右伸缩箭头
+      hoverBar = e.currentTarget;
+      hoverX = e.clientX;
+      ctrlHeld = !!e.ctrlKey;
+      setBarHoverCursor();
+      return;
+    }
+    barDrag.clientX = e.clientX;
+    barDrag.clientY = e.clientY;
+    applyBarDrag();
+  }
+
+  // 拖动进度条到屏幕左右边缘时，视口反方向自动滚动跟随（以进度条为中心）。
+  function panBarDrag() {
+    if (!barDrag) { barPanFrame = null; return; }
+    var d = barDrag;
+    if (d.clientX == null) { barPanFrame = requestAnimationFrame(panBarDrag); return; }
+    var localX = d.clientX - vp.getBoundingClientRect().left;
+    var speed = localX < LEFT_W + 28 ? -12 : localX > vp.clientWidth - 28 ? 12 : 0;
+    if (speed) {
+      var before = vp.scrollLeft;
+      vp.scrollLeft = Math.max(0, vp.scrollLeft + speed);
+      if (before !== vp.scrollLeft) applyBarDrag();
+    }
+    barPanFrame = requestAnimationFrame(panBarDrag);
+  }
+  function endBarDrag(e) {
+    if (!barDrag || (e && e.pointerId != null && e.pointerId !== barDrag.id)) return;
+    var d = barDrag;
+    barDrag = null;
+    if (barPanFrame !== null) { cancelAnimationFrame(barPanFrame); barPanFrame = null; }
+    d.barEl.classList.remove('dragging');
+    document.body.classList.remove('dragging-date');
+    if (d.barEl.hasPointerCapture && d.barEl.hasPointerCapture(d.id)) d.barEl.releasePointerCapture(d.id);
+    // 提交修改：清缓存、重算汇总并重渲染可见行
+    spanCache = {};
+    sortedCache = {};
+    refreshGroupSpans();
+    persistEdits(d.bis);                // 把改动写回 data.js（服务端原子写回）
+    // 拖动结束后补齐轴边界（含向左拖到过去方向）：px 冻结，不重排缩放。
+    if (d.span) {
+      var pad = 30;
+      var changed = false;
+      if (d.span[0] < viewStart) {
+        var shift = viewStart - d.span[0] + pad;
+        viewStart -= shift;
+        totalDays += shift;
+        changed = true;
+      }
+      if (d.span[1] > viewStart + totalDays - 1) {
+        totalDays = (d.span[1] + pad) - viewStart + 1;
+        changed = true;
+      }
+      if (changed) refreshAxisGeometry();
+      // 向左拖过轴起点（拖进过去方向）后，视口已随边缘自动滚动深入过去区：
+      // 松开时把视口拉回一点，让刚伸出去的左端立即出现在屏幕上。
+      if (d.viewStart0 != null && d.span[0] < d.viewStart0) {
+        var maxSl = (d.span[0] - viewStart) * px - 40;
+        if (vp.scrollLeft > Math.max(0, maxSl)) vp.scrollLeft = Math.max(0, maxSl);
+      }
+    }
+    invalidate();
+    hideTip();
+  }
+  function onBarPointerUp(e) { endBarDrag(e); }
+
+  // 把本次拖动涉及的分段日期写回 data.js（服务端原子写回，跨会话保留）
+  function persistEdits(bis) {
+    for (var i = 0; i < bis.length; i++) {
+      var bi = bis[i];
+      var b = blocks[bi];
+      if (!b) continue;
+      var arr = [];
+      for (var k = 6; k < 16; k++) arr.push(b[k]);
+      edits[bi] = arr;
+    }
+    fetch('/edits', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ v: 2, e: edits })
+    }).then(function (res) {
+      if (!res.ok) { flash('保存失败：HTTP ' + res.status, 2000); return; }
+      res.json().then(function (r) {
+        flash(r && r.baked ? '已保存并写回 data.js' : '已保存到本地存档', 1400);
+      }).catch(function () { flash('已保存进度条改动', 1200); });
+    }).catch(function () {
+      flash('保存失败：存档服务未运行', 2000);
+    });
+  }
+
+  // 按住/松开 Ctrl 时立即刷新悬停光标（无需移动鼠标即可切换伸缩箭头）
+  function refreshCtrlCursors() {
+    setBarHoverCursor();
+    if (todayEl) todayEl.style.cursor = ctrlHeld ? 'not-allowed' : '';  // Ctrl 下红线锁定
+  }
+  window.addEventListener('keydown', function (e) {
+    if (e.key === 'Control' && !e.repeat) { ctrlHeld = true; refreshCtrlCursors(); }
+  });
+  window.addEventListener('keyup', function (e) {
+    if (e.key === 'Control') { ctrlHeld = false; refreshCtrlCursors(); }
+  });
+  window.addEventListener('blur', function () { ctrlHeld = false; refreshCtrlCursors(); });
+
+  /* ---------------- 导出 Excel（样式与当前视图一致） ---------------- */
+  function flash(msg, dur) {
+    var el = document.createElement('div');
+    el.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:99999;background:rgba(18,27,42,.95);' +
+      'color:#e8eefa;border-radius:8px;padding:9px 14px;font-size:12px;box-shadow:0 8px 24px rgba(10,16,26,.3);';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(function () {
+      el.style.transition = 'opacity .25s'; el.style.opacity = '0';
+      setTimeout(function () { el.remove(); }, 260);
+    }, dur || 3600);
+  }
+
+  function buildExportPayload() {
+    var days = [];
+    for (var k = 0; k < totalDays; k++) {
+      var day = viewStart + k;
+      days.push({ num: dateOf(day).getUTCDate(), wd: weekdayOf(day),
+                  today: (day === today), date: fmtFull(day) });
+    }
+    // 月份表头：复用 buildHeader 的拆分口径
+    var months = [];
+    var i = 0;
+    var avgMonth = 30.4 * px;
+    while (i < totalDays) {
+      var day = viewStart + i;
+      var d = dateOf(day);
+      var nextM = dayOf(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
+      var len = Math.min(totalDays - i, nextM - day);
+      if (len < 1) len = 1;
+      var mon = d.getUTCMonth() + 1;
+      var wMonth = len * px;
+      var partial = (i === 0 || i + len >= totalDays) && wMonth < 26;
+      var text = '';
+      if (!partial) {
+        if (mon === 1) text = String(d.getUTCFullYear()).slice(2) + '年';
+        else if (avgMonth >= 30) text = mon + '月';
+        else if (avgMonth >= 24 && mon % 3 === 1) text = mon + '月';
+      }
+      months.push({ text: text, span: len });
+      i += len;
+    }
+
+    function groupCells(gm, mid) {
+      return [gm[0], mid || (gm[1] || ''), '', '', '', ''];
+    }
+    function blockCells(b, mid) {
+      var seg = b[1] || '';
+      var ton = b[3] ? String(b[3]) : '';
+      if (groupMode === 'shop') {
+        return [seg, hulls[b[0]][0], ton, types[b[2]] || '', '', ''];
+      }
+      return [seg, mid || (types[b[2]] || ''), ton, shops[b[5]] || areas[b[4]] || '', '', ''];
+    }
+
+    var outRows = [];
+    for (var r2 = 0; r2 < rows.length; r2++) {
+      var rr = rows[r2];
+      if (rr.k === 's') {
+        var hi = rr.i;
+        var gm = groupMeta(hi);
+        if (phaseKey === 'multi') {
+          // 展示里组汇总也是同一行叠 5 条彩色条，导出时逐阶段展开成 5 行
+          var spans = groupPhaseSpans()[hi];
+          for (var p = 0; p < MULTI.length; p++) {
+            var sp = spans[p];
+            var cells = groupCells(gm, PHASES[MULTI[p]].name);
+            cells[4] = sp ? fmtMD(sp[0]) : '—';
+            cells[5] = sp ? (sp[1] - sp[0] + 1) + '天' : '待定';
+            var bar = null;
+            if (sp) {
+              var c0 = Math.max(0, sp[0] - viewStart);
+              var c1 = Math.min(totalDays - 1, sp[1] - viewStart);
+              if (c1 >= c0) bar = { c0: c0, c1: c1, color: PHASES[MULTI[p]].color, label: '' };
+            }
+            outRows.push({ kind: 's', cells: cells, bar: bar });
+          }
+        } else {
+          var sp2 = groupSpans[hi];
+          var cells2 = groupCells(gm, '');
+          cells2[4] = sp2 ? fmtMD(sp2[0]) : '—';
+          cells2[5] = sp2 ? (sp2[1] - sp2[0] + 1) + '天' : '待定';
+          var bar2 = null;
+          if (sp2) {
+            var c0 = Math.max(0, sp2[0] - viewStart);
+            var c1 = Math.min(totalDays - 1, sp2[1] - viewStart);
+            if (c1 >= c0) bar2 = { c0: c0, c1: c1, color: PHASES.all.color, label: '' };
+          }
+          outRows.push({ kind: 's', cells: cells2, bar: bar2 });
+        }
+      } else if (rr.k === 'n') {
+        var hn = hulls[rr.i];
+        var nCells = (groupMode === 'shop')
+          ? ['暂无车间', hn[0], '', hn[1] || '', '—', '待定']
+          : [hn[0], hn[1] || '', '', '', '—', '待定'];
+        outRows.push({ kind: 'n', cells: nCells, bar: null });
+      } else {
+        var b = blocks[rr.i];
+        if (phaseKey === 'multi') {
+          // 导出时把一个分段展开成 5 行（Excel 每行只能画一条条，展示仍是在同一行叠 5 条）
+          for (var p2 = 0; p2 < MULTI.length; p2++) {
+            var kk = MULTI[p2];
+            var cellsP = blockCells(b, PHASES[kk].name);
+            var bbP = barOf(b, kk);
+            var barP = null;
+            if (bbP) {
+              cellsP[4] = fmtMD(bbP[0]);
+              cellsP[5] = (bbP[1] - bbP[0] + 1) + '天' + (bbP[2] ? '*' : '');
+              var c0 = Math.max(0, bbP[0] - viewStart);
+              var c1 = Math.min(totalDays - 1, bbP[1] - viewStart);
+              if (c1 >= c0) barP = { c0: c0, c1: c1, color: PHASES[kk].color, label: b[1] || '' };
+            } else {
+              cellsP[4] = '—';
+              cellsP[5] = '待定';
+            }
+            outRows.push({ kind: 'b', cells: cellsP, bar: barP });
+          }
+        } else {
+          var cells3 = blockCells(b, '');
+          var bb = barOf(b, phaseKey);
+          var bar3 = null;
+          if (bb) {
+            cells3[4] = fmtMD(bb[0]);
+            cells3[5] = (bb[1] - bb[0] + 1) + '天' + (bb[2] ? '*' : '');
+            var c0 = Math.max(0, bb[0] - viewStart);
+            var c1 = Math.min(totalDays - 1, bb[1] - viewStart);
+            if (c1 >= c0) bar3 = { c0: c0, c1: c1, color: PHASES[phaseKey].color, label: b[1] || '' };
+          } else {
+            cells3[4] = '—';
+            cells3[5] = '待定';
+          }
+          outRows.push({ kind: 'b', cells: cells3, bar: bar3 });
+        }
+      }
+    }
+
+    var legend = ['pb', 'tt', 'jg', 'sn', 'zx', 'all'].map(function (k) {
+      return { name: PHASES[k].name, color: PHASES[k].color };
+    });
+
+    return {
+      title: '分段生产横道图',
+      phase: phaseKey,
+      phaseName: phaseKey === 'multi' ? '全部阶段（同时显示）' : PHASES[phaseKey].name,
+      scale: customPx === null ? scaleKey : (showDayHeader() ? 'day' : 'month'),
+      range: [fmtFull(viewStart), fmtFull(viewStart + totalDays - 1)],
+      leftCols: columnLabels(),
+      days: days,
+      months: months,
+      rows: outRows,
+      legend: legend
+    };
+  }
+
+  async function exportExcel() {
+    var btn = $('exportBtn');
+    var payload;
+    try { payload = buildExportPayload(); }
+    catch (e) { flash('导出失败：' + (e && e.message ? e.message : e)); return; }
+    btn.disabled = true; btn.textContent = '导出中…';
+    try {
+      var res = await fetch('/api/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Panel': '1' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        var err = {};
+        try { err = await res.json(); } catch (e) {}
+        throw new Error(err.error || ('HTTP ' + res.status));
+      }
+      var blob = await res.blob();
+      var cd = res.headers.get('Content-Disposition') || '';
+      var m = /filename\*=UTF-8''([^;]+)/.exec(cd) || /filename="?([^";]+)"?/.exec(cd);
+      var name = m ? decodeURIComponent(m[1]) : '横道图.xlsx';
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(blob); }, 4000);
+      flash('已导出：' + name + '（已触发下载，同时存到 DATE 文件夹）');
+    } catch (e) {
+      flash('导出失败：' + (e && e.message ? e.message : e) + '（需要窗口界面/服务在运行）');
+    } finally {
+      btn.disabled = false; btn.textContent = '导出 Excel';
+    }
+  }
+  $('exportBtn').addEventListener('click', exportExcel);
+
+  /* ---------------- 启动 ---------------- */
+  $('phase').addEventListener('change', function () { setPhase(this.value); });
+  $('zoom').addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (b) setScale(b.getAttribute('data-s'));
+  });
+  $('todayBtn').addEventListener('click', scrollToToday);
+  $('backBtn').addEventListener('click', leaveGroup);
+  $('group').addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (b) setGroupMode(b.getAttribute('data-g'));
+  });
+  $('dragToggle').addEventListener('click', function () {
+    dragEnabled = !dragEnabled;
+    var btn = $('dragToggle');
+    if (dragEnabled) {
+      btn.textContent = '禁用拖动';
+      btn.classList.remove('danger');
+    } else {
+      btn.textContent = '启用拖动';
+      btn.classList.add('danger');
+    }
+    document.body.classList.toggle('drag-off', !dragEnabled);
+  });
+  $('resetBtn').addEventListener('click', function () {
+    if (!confirm('确定要恢复为原始数据吗？这会丢弃所有进度条改动。')) return;
+    fetch('/restore', { method: 'POST' })
+      .then(function (res) {
+        if (res.ok) { flash('已恢复原始数据', 1400); }
+        else {
+          res.json().then(function (r) { flash('恢复失败：' + ((r && r.error) || '没有原始备份'), 2400); })
+            .catch(function () { flash('恢复失败', 2400); });
+        }
+      })
+      .catch(function () { flash('恢复失败：服务未运行', 2400); })
+      .then(function () { location.reload(); });
+  });
+  var qt = null;
+  $('q').addEventListener('input', function () {
+    clearTimeout(qt);
+    qt = setTimeout(function () { rebuildRows(); layout(); vp.scrollTop = 0; }, 220);
+  });
+
+  var rt = null;
+  var lastW = 0;
+
+  // 宽度变了就重排（首屏在部分环境里拿到的还是默认窗口宽度）
+  function relayout() {
+    if (Math.abs(vp.clientWidth - lastW) < 2) return;
+    lastW = vp.clientWidth;
+    layout();
+  }
+
+  window.addEventListener('resize', function () {
+    clearTimeout(rt);
+    rt = setTimeout(relayout, 80);
+  });
+
+  if (window.ResizeObserver) {
+    try {
+      new ResizeObserver(function () { relayout(); }).observe(vp);
+    } catch (e) { /* 忽略 */ }
+  }
+
+  function boot() {
+    $('s-ship').textContent = hulls.length;
+    $('s-block').textContent = blocks.length.toLocaleString();
+    $('s-range').textContent = fmtFull(minDay) + ' ~ ' + fmtFull(maxDay);
+    $('s-gen').textContent = '数据生成于 ' + (D.gen || '-');
+
+    var q = location.search;
+    var mPhase = /[?&]phase=(\w+)/.exec(q);
+    if (mPhase && (PHASES[mPhase[1]] || mPhase[1] === 'multi')) {
+      phaseKey = mPhase[1];
+      $('phase').value = mPhase[1];
+    }
+    var mHull = /[?&]hull=([^&]+)/.exec(q);
+    if (mHull) {
+      var name = decodeURIComponent(mHull[1]);
+      for (var i = 0; i < hulls.length; i++) {
+        if (hulls[i][0] === name) {
+          focus = i;
+          $('backBtn').style.display = '';
+          break;
+        }
+      }
+    }
+
+    var mScale = /[?&]scale=(month|week|day)/.exec(q);
+    if (mScale) {
+      scaleKey = mScale[1];
+      setScaleButtons(scaleKey);
+    } else if (focus >= 0) {
+      // 深链进单船时，同样默认日视图
+      scaleKey = 'day';
+      setScaleButtons('day');
+    }
+
+    refreshGroupSpans();
+    updateHeaders();
+    rebuildRows();
+    layout();
+    lastW = vp.clientWidth;
+    vp.scrollTop = 0;
+    vp.scrollLeft = 0;
+    // 首屏宽度可能在下一帧才稳定，再校正一次
+    requestAnimationFrame(function () { relayout(); });
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

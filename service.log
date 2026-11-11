@@ -1,0 +1,8 @@
+2026-11-08 09:19:11  读取存档失败：JSONDecodeError('Expecting value: line 1 column 1 (char 0)')
+2026-11-08 09:19:11  读取存档失败：JSONDecodeError('Expecting value: line 1 column 1 (char 0)')
+2026-11-08 09:19:25  横道图 Webhook 已启动：http://127.0.0.1:8099/
+2026-11-08 09:19:25    查看器  http://127.0.0.1:8099/
+2026-11-08 09:19:25    窗口界面 http://127.0.0.1:8099/app
+2026-11-08 09:19:25    推送    POST http://127.0.0.1:8099/webhook/gantt
+2026-11-08 09:19:25    注意：未设置 token，任何能访问到本机的人都能推送数据
+2026-11-09 19:40:37  保存存档失败：PermissionError(13, '拒绝访问。')

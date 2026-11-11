@@ -1,0 +1,12 @@
+{
+  "webhook": "https://www.kdocs.cn/api/v3/ide/file/575304251572/script/V2-1MGKN6GaPv8k0Z6I8i4EG0/sync_task",
+  "token": "5Txyk4rdhFojg57a3gK8wt",
+  "sheet": "",
+  "header_rows": 4,
+  "rows_per_call": 500,
+  "max_rows": 200000,
+  "timeout": 120,
+  "out": "data.js",
+  "reset_edits_on_rebuild": true,
+  "link_url": "https://www.kdocs.cn/l/cjRS1mDcRt9D"
+}
